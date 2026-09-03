@@ -108,6 +108,10 @@ URI:er: `products://search?q=<query>`, `products://<sku>`, `categories://current
 
 `[{"key":"Pjäxkvalitet klassiska","title":"Pjäxkvalitet klassiska","children":[{"key":"Klassiska pjäxor Sportlov","title":"..."},{"key":"...","title":"...","url":"https://www.addnature.com/sv/tag/bra-battre-pjaxor"}]}]`
 
+## Kända brister
+
+Se `mcp-chat-test.md`. Kort: `categories[]` och `tags[]` har ingen effekt, `max_nr_of_products` begränsas inte till 100, 1-teckens query ger HTTP 500, ingen stavningstolerans, inga strukturerade specar.
+
 ## Att tänka på för vår klient
 
 - `price` är en sträng. Parsa till tal själv om det behövs.

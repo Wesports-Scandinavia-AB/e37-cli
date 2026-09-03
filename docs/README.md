@@ -8,6 +8,7 @@ Anteckningar om E37: API-endpoints, autentisering, MCP-upplägg och beslut.
 | [order-api.pdf](order-api.pdf) | Samma dokument som PDF. |
 | [triton-admin-1.0.openapi.json](triton-admin-1.0.openapi.json) | OpenAPI 3.1-spec för Triton Admin REST API, hämtad från `https://admin3.e37.se/docs/Triton-Admin-1.0.json` 2026-09-03. |
 | [mcp.md](mcp.md) | E37:s publika MCP-server per butik (verktyg, protokoll, svarsformat). |
+| [mcp-chat-test.md](mcp-chat-test.md) | Test av att chatta om produkter via MCP:n på Addnature. Vad som fungerar, vad som inte gör det, och vad vår egen MCP behöver kompensera för. |
 
 ## Översikt över E37:s ytor
 
