@@ -10,7 +10,7 @@ Samlingsrepo för E37-integrationer (API-anrop, MCP-server, dokumentation).
 
 ## Status
 
-Repot är nystartat (2026-09-03). Detaljer om E37:s API och MCP kommer senare.
+Repot är nystartat (2026-09-03). E37 är webbshopsplattformen bakom addnature.com och outdoorexperten.se. Deras publika MCP-server är dokumenterad i `docs/mcp.md`. Detaljer om deras API kommer senare.
 
 ## Struktur
 
