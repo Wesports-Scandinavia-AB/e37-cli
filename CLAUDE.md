@@ -15,7 +15,7 @@ Repot är nystartat (2026-09-03). Detaljer om E37:s API och MCP kommer senare.
 ## Struktur
 
 - `client/api/` – typad klient mot E37:s officiella API. Föredra alltid denna.
-- `client/web/` – klient mot E37:s webbgränssnitt, bara för luckor i API:et. Skör; dokumentera vilken lucka varje funktion täcker.
+- `client/web/` – klient mot E37:s webbgränssnitt, bara för luckor i API:et. Webben är ASP.NET WebForms (ViewState, POST-backs, inga JSON-endpoints); se `client/web/README.md`. Skör; dokumentera vilken lucka varje funktion täcker.
 - `mcp/` – MCP-server. Importerar `client/`, duplicerar inte anrop.
 - `docs/` – dokumentation och beslut.
 
