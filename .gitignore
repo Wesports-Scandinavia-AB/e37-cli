@@ -1,0 +1,19 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# deps / build
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# logs
+*.log
