@@ -14,7 +14,8 @@ Repot är nystartat (2026-09-03). Detaljer om E37:s API och MCP kommer senare.
 
 ## Struktur
 
-- `client/` – typad klient mot E37:s API. All anropslogik mot E37 ligger här.
+- `client/api/` – typad klient mot E37:s officiella API. Föredra alltid denna.
+- `client/web/` – klient mot E37:s webbgränssnitt, bara för luckor i API:et. Skör; dokumentera vilken lucka varje funktion täcker.
 - `mcp/` – MCP-server. Importerar `client/`, duplicerar inte anrop.
 - `docs/` – dokumentation och beslut.
 
