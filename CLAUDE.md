@@ -11,3 +11,11 @@ Samlingsrepo för E37-integrationer (API-anrop, MCP-server, dokumentation).
 ## Status
 
 Repot är nystartat (2026-09-03). Detaljer om E37:s API och MCP kommer senare.
+
+## Struktur
+
+- `client/` – typad klient mot E37:s API. All anropslogik mot E37 ligger här.
+- `mcp/` – MCP-server. Importerar `client/`, duplicerar inte anrop.
+- `docs/` – dokumentation och beslut.
+
+Platt struktur medvetet. Flytta till `packages/` först när ett tredje paket behövs.

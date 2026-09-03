@@ -6,10 +6,12 @@ Samlingsrepo för allt som rör E37: integrationer mot deras API, MCP-server, do
 
 | Sökväg | Beskrivning |
 |---|---|
+| `client/` | Typad klient mot E37:s API |
+| `mcp/` | MCP-server som använder `client/` |
 | `docs/` | Anteckningar, API-dokumentation och beslut |
 | `.env.example` | Mall för miljövariabler (nycklar, endpoints). Kopiera till `.env`, som är gitignorerad |
 
-Mer läggs till efterhand (API-klient, MCP-server osv.).
+Strukturen är platt medvetet. Om ett tredje paket dyker upp flyttas allt till `packages/`.
 
 ## Kom igång
 
