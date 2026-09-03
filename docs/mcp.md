@@ -77,7 +77,22 @@ URI:er: `products://search?q=<query>`, `products://<sku>`, `categories://current
 | `in_stock` | bool | |
 | `is_new` | bool | |
 | `is_campaign` | bool | |
-| `variations` | array | Finns i sökresultat. Form ej dokumenterad ännu. |
+| `variations` | array | Bara i sökresultat, saknas i `get_product`. Element: `{"title":"Carbon","in_stock":true}`. Titeln är oftast färg. Ingen egen SKU eller pris per variant. |
+
+### Facetter i sökresultat
+
+`categories`, `brands` och `tags` i sökresultatet är facetter för den aktuella sökningen, med antal träffar per värde. De kan skickas tillbaka som filter i nästa sökning.
+
+- `categories`: `[{"id":4780,"title":"Kläder","nr_of_products":550}]` – filtrera på `title`.
+- `brands`: `[{"id":305,"title":"2117 of Sweden","nr_of_products":17}]` – filtrera på `title`.
+- `tags`: hierarkiska, två nivåer. Filtrera på `key` från barnen:
+
+```json
+{"key":"#GENDER","title":"Målgrupp","nr_of_products":31,"children":[
+  {"key":"#gender dam","title":"Dam","nr_of_products":273},
+  {"key":"#gender herr","title":"Herr","nr_of_products":280}
+]}
+```
 
 ### list_categories
 
@@ -87,9 +102,16 @@ URI:er: `products://search?q=<query>`, `products://<sku>`, `categories://current
 
 `[{"id":305,"title":"2117 of Sweden","url":"...","nr_of_products":77}]`
 
+### list_tags
+
+157 taggar på Addnature. Samma tvånivåstruktur som i sökresultatet men utan `nr_of_products`. Nycklar är fritext, ibland med `#`-prefix (`#GENDER`, `#gender dam`), ibland bara ett namn (`Pjäxkvalitet klassiska`). Barn kan ha `url`.
+
+`[{"key":"Pjäxkvalitet klassiska","title":"Pjäxkvalitet klassiska","children":[{"key":"Klassiska pjäxor Sportlov","title":"..."},{"key":"...","title":"...","url":"https://www.addnature.com/sv/tag/bra-battre-pjaxor"}]}]`
+
 ## Att tänka på för vår klient
 
 - `price` är en sträng. Parsa till tal själv om det behövs.
+- `get_product` ger inte mer än sökresultatet, snarare mindre (ingen `variations`). Använd sök om varianter behövs.
 - Beskrivningar kan innehålla HTML-entiteter.
 - Resultatet är på svenska och SE-priser; det finns inga andra språk/länder i schemat i dag.
 - Servern är publik och kräver ingen nyckel, men det är en produktionsbutik. Håll anropsvolymen rimlig.
