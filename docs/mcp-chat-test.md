@@ -58,3 +58,39 @@ Om vi bygger en egen MCP-server ovanpå E37 bör den kompensera för ovanståend
 - Kan produkter få strukturerade attribut (vikt, personer, storlek) i svaret?
 - Finns underkategorier att söka på?
 - 1-teckens query ger HTTP 500.
+
+## Svarsstorlek och svarstid
+
+Mätt 2026-09-03. Varje produkt kommer med hela beskrivningen, så storleken växer snabbt.
+
+| Anrop | Storlek | Ungefär tokens | Svarstid |
+|---|---|---|---|
+| `search_products`, 5 produkter | 10 KB | 2 700 | 250 ms |
+| `search_products`, 30 produkter (default) | 46 KB | 11 700 | 310 ms |
+| `search_products`, 100 produkter | 155 KB | 39 700 | 570 ms |
+| `get_product` | 2 KB | 450 | 230 ms |
+| `list_brands` (303 märken) | 35 KB | 9 000 | 120 ms |
+| `list_tags` (157 taggar) | 11 KB | 2 800 | 90 ms |
+
+Svarstiderna är inget problem. Tokenkostnaden är det: några sökningar med default-antalet fyller kontexten i ett chattsamtal. Sätt `max_nr_of_products` till 5–10 i en chatt.
+
+## Bedömning: E37:s MCP direkt i Zendesk-chatten på siten
+
+Frågan ställdes 2026-09-03. Slutsats: koppla inte in den direkt.
+
+**Hade fungerat**
+
+- Uppslag på namngiven produkt: lager, pris, kampanj, färgvarianter. Bra värde utanför öppettider.
+- "Vad är på rea bland X?" via `campaign_only`.
+
+**Hade gått dåligt**
+
+- Supportfrågor, som är merparten av chatttrafiken. "Var är min order" gav 171 produkter, "returnera" gav 18. MCP:n har inget om order, leverans eller retur. Order-API:t behövs för det.
+- Stavfel ger noll träffar, och agenten skulle svara "vi har inga tält". Falska "finns inte"-svar är värre än inget svar.
+- Rådgivning ("vilket tält till fjällen i september?") kräver att modellen sållar tillbehör, parsar vikt ur fritext och gissar när beskrivning saknas. Hög risk för självsäkra felaktiga rekommendationer.
+- Om modellen skickar kundens hela mening som sökord blir resultatet skräp (regnjackor på en tältfråga).
+- Tokenkostnad per anrop, se tabellen ovan.
+
+**Rekommendation**
+
+Lägg vår egen MCP i `mcp/` mellan Zendesk och E37. Den ska hålla `max_nr_of_products` lågt, normalisera sökord till 1–2 nyckelord, söka igen på engelska vid noll träffar, filtrera bort tillbehör, parsa pris till tal, och exponera orderuppslag från Order-API:t så snart nyckeln finns. Kontrollera också om Zendesks AI-agent kan konsumera en extern MCP-server; annars behöver vår server även ett vanligt HTTP-API.
