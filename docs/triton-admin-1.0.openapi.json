@@ -1,0 +1,1510 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Triton Admin 1.0",
+    "version": "1.0",
+    "summary": "Triton Admin 1.0",
+    "description": "# Authentication\nThis API uses basic authentication.\n\nBasic authentication is a simple authentication scheme built into the HTTP protocol. To use it, send your HTTP requests with an Authorization header that contains the word Basic followed by a space and a base64-encoded string `username:password`.\n\nExample: `Authorization: Basic ZGVtbzpwQDU1dzByZA==`\n\n**Username**\\\nYour webshop ID\n\n**Password**\\\nYour API key. You can create one in your webshop's back-end.",
+    "contact": {
+      "email": "support@e37.se",
+      "url": "https://www.e37.se"
+    },
+    "license": {
+      "name": "E37 Triton",
+      "url": "https://www.e37.se"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://admin2.e37.se/api",
+      "description": "web02"
+    },
+    {
+      "description": "web03",
+      "url": "https://admin3.e37.se/api"
+    }
+  ],
+  "paths": {
+    "/orders/{marketplace_instance_guid}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "string"
+          },
+          "name": "marketplace_instance_guid",
+          "in": "path",
+          "required": true,
+          "description": "Marketplace instance GUID. Found on your marketplace instance."
+        }
+      ],
+      "post": {
+        "summary": "Create marketplace order",
+        "operationId": "post-orders",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "",
+                  "type": "object",
+                  "x-examples": {
+                    "example-1": {
+                      "OrderNumber": 123,
+                      "Order": {}
+                    }
+                  },
+                  "properties": {
+                    "E37OrderNumber": {
+                      "type": "integer",
+                      "description": "Order number for the newly created order in E37.",
+                      "example": 112233,
+                      "readOnly": true
+                    }
+                  },
+                  "required": [
+                    "E37OrderNumber"
+                  ]
+                },
+                "examples": {
+                  "example-1": {
+                    "value": {
+                      "E37OrderNumber": 112233
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/GeneralError"
+          }
+        },
+        "description": "Creates a new marketplace order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarketplaceOrder"
+              },
+              "examples": {
+                "example-1": {
+                  "value": {
+                    "orderNumber": "EXT-112344",
+                    "orderNumberExtra": "1111",
+                    "orderDate": "2021-01-01T10:00:00.000Z",
+                    "customerType": 1,
+                    "currencyCode": "SEK",
+                    "countryCode": "se",
+                    "languageCode": "sv",
+                    "shipmentFeeInclVat": 100,
+                    "shipmentFeeExclVat": 80,
+                    "shipmentFeeVatPercent": 25,
+                    "deliveryDate": "2021-01-01T00:00:00.000Z",
+                    "totalSumInclVat": 1000,
+                    "totalSumExclVat": 800,
+                    "customer": {
+                      "name": "Anna Andersson",
+                      "companyReference": "",
+                      "email": "support@e37.se",
+                      "phone": "+46812345678",
+                      "mobilePhone": "+46701111611",
+                      "invoiceAddress": {
+                        "address1": "Storgatan 1",
+                        "address2": "c/o Pelle Persson",
+                        "zip": "11136",
+                        "city": "Stockholm",
+                        "state": "",
+                        "countryCode": "se"
+                      },
+                      "deliveryAddress": {
+                        "address1": "Storgatan 1",
+                        "address2": "c/o Pelle Persson",
+                        "zip": "11136",
+                        "city": "Stockholm",
+                        "state": "",
+                        "countryCode": "se",
+                        "deliveryPhone": "+46812345678",
+                        "deliveryName": "Anna Andersson"
+                      }
+                    },
+                    "rows": [
+                      {
+                        "sku": "ABC-123",
+                        "ean": "0194398345927",
+                        "productName": "ABC-tavla",
+                        "quantity": 1,
+                        "priceInclVat": 900,
+                        "priceExclVat": 720,
+                        "vatPercent": 25
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "description": ""
+        },
+        "parameters": [],
+        "tags": [
+          "Orders"
+        ]
+      }
+    },
+    "/orders/{id}": {
+      "parameters": [
+        {
+          "schema": {
+            "type": "integer"
+          },
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "E37 order number"
+        }
+      ],
+      "get": {
+        "summary": "Get order",
+        "tags": [
+          "Orders"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get-orders-id",
+        "description": "Get information about an order."
+      }
+    },
+    "/orders/{id}/status": {
+      "get": {
+        "summary": "Get order status",
+        "tags": [
+          "Orders"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "",
+                  "type": "object",
+                  "x-examples": {
+                    "example-1": {
+                      "ID": 7700,
+                      "ExternalOrderNumber": "EXT-ORDER-1",
+                      "OrderStatus": {
+                        "ID": 1,
+                        "Name": "NewOrder"
+                      }
+                    }
+                  },
+                  "properties": {
+                    "ID": {
+                      "type": "integer",
+                      "description": "E37 order number"
+                    },
+                    "ExternalOrderNumber": {
+                      "type": "string",
+                      "description": "External order number, if external order."
+                    },
+                    "OrderStatus": {
+                      "type": "object",
+                      "description": "Information about the current order status.",
+                      "required": [
+                        "ID",
+                        "Name"
+                      ],
+                      "properties": {
+                        "ID": {
+                          "type": "integer",
+                          "description": "* 1: NewOrder\n* 2: Cancelled\n* 3: Delivered\n* 4: PackingSlipPrinted\n* 5: ChangeOrder\n* 6: PartiallyDelivered\n* -1: Custom\n"
+                        },
+                        "Name": {
+                          "type": "string",
+                          "description": "String representation of the order status."
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "ID",
+                    "OrderStatus"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "operationId": "get-orders-7700-status",
+        "description": "Get current order status for order."
+      },
+      "parameters": [
+        {
+          "schema": {
+            "type": "integer"
+          },
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "E37 order number"
+        }
+      ]
+    },
+    "/giftcard": {
+      "parameters": [],
+      "post": {
+        "summary": "Create giftcard",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GiftCardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/GeneralError"
+          }
+        },
+        "operationId": "post-giftcard",
+        "x-stoplight": {
+          "id": "1np4ylorkl5on"
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GiftCardRequest"
+              },
+              "examples": {
+                "Example 1": {
+                  "value": {
+                    "validToDate": "2027-02-01T10:00:00.000Z",
+                    "type": 1,
+                    "currencyCode": "sek",
+                    "value": 350,
+                    "externalReference": "AB1234",
+                    "vatPercentage": 25,
+                    "countryCode": "SE",
+                    "siteId": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Giftcard"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MarketplaceOrder": {
+        "description": "",
+        "type": "object",
+        "x-examples": {
+          "example-1": {
+            "orderNumber": "EXT-ORDER-1",
+            "orderDate": "2021-10-29T10:00:00.000Z",
+            "customerType": 1,
+            "currencyCode": "SEK",
+            "countryCode": "se",
+            "languageCode": "sv",
+            "shipmentFeeInclVat": 0,
+            "shipmentFeeExclVat": 0,
+            "shipmentFeeVatPercent": 25,
+            "deliveryDate": null,
+            "totalSumInclVat": 100,
+            "totalSumExclVat": 80,
+            "customer": {
+              "name": "Johan Andersson",
+              "companyReference": null,
+              "email": "johan@e37.se",
+              "phone": null,
+              "mobilePhone": "0706111614",
+              "invoiceAddress": {
+                "address1": "Gyllenvägen 12",
+                "address2": null,
+                "zip": "134 39",
+                "city": "Gustavsberg",
+                "state": null,
+                "countryCode": "se"
+              },
+              "deliveryAddress": {
+                "address1": "Gyllenvägen 12",
+                "address2": null,
+                "zip": "134 39",
+                "city": "Gustavsberg",
+                "state": null,
+                "countryCode": "se",
+                "deliveryPhone": null,
+                "deliveryName": "Johan Andersson"
+              }
+            },
+            "rows": [
+              {
+                "productNumber": "000121-000",
+                "ean": null,
+                "productName": "(Fredrik) Karlssons klister",
+                "quantity": 0,
+                "priceInclVat": 100,
+                "priceExclVat": 80,
+                "vatPercent": 25
+              }
+            ]
+          }
+        },
+        "examples": [
+          {
+            "orderNumber": "EXT-112344",
+            "orderNumberExtra": "1111",
+            "orderDate": "2021-01-01T10:00:00.000Z",
+            "customerType": 1,
+            "currencyCode": "SEK",
+            "countryCode": "se",
+            "languageCode": "sv",
+            "shipmentFeeInclVat": 100,
+            "shipmentFeeExclVat": 80,
+            "shipmentFeeVatPercent": 25,
+            "deliveryDate": "2021-01-01T00:00:00.000Z",
+            "totalSumInclVat": 1000,
+            "totalSumExclVat": 800,
+            "customer": {
+              "name": "Anna Andersson",
+              "companyReference": "",
+              "email": "support@e37.se",
+              "phone": "+46812345678",
+              "mobilePhone": "+46701111611",
+              "invoiceAddress": {
+                "address1": "Storgatan 1",
+                "address2": "c/o Pelle Persson",
+                "zip": "11136",
+                "city": "Stockholm",
+                "state": "",
+                "countryCode": "se"
+              },
+              "deliveryAddress": {
+                "address1": "Storgatan 1",
+                "address2": "c/o Pelle Persson",
+                "zip": "11136",
+                "city": "Stockholm",
+                "state": "",
+                "countryCode": "se",
+                "deliveryPhone": "+46812345678",
+                "deliveryName": "Anna Andersson"
+              }
+            },
+            "rows": [
+              {
+                "sku": "ABC-123",
+                "ean": "0194398345927",
+                "productName": "ABC-tavla",
+                "quantity": 1,
+                "priceInclVat": 900,
+                "priceExclVat": 720,
+                "vatPercent": 25
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "orderNumber": {
+            "type": "string",
+            "description": "External order number. Must be unique per marketplace instance.",
+            "maxLength": 64
+          },
+          "orderNumberExtra": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Extra external order number, for a marketplace hub (eg. Sello)"
+          },
+          "orderDate": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2021-01-01T10:00:00.000Z",
+            "description": "Timestamp when the order was created."
+          },
+          "customerType": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "description": "Type of customer.\n1 = private, 2 = company"
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "SEK",
+            "description": "Currency code in ISO three letter format."
+          },
+          "countryCode": {
+            "type": "string",
+            "example": "se",
+            "description": "Country code in ISO two letter format."
+          },
+          "languageCode": {
+            "type": "string",
+            "example": "sv",
+            "description": "Language code in ISO two letter format. Defaults to the default language for the store if not provided."
+          },
+          "shipmentFeeInclVat": {
+            "type": "number",
+            "description": "Shipping fee, including VAT",
+            "example": 100,
+            "format": "double"
+          },
+          "shipmentFeeExclVat": {
+            "type": "number",
+            "description": "Shipping fee, excluding VAT",
+            "example": 80,
+            "format": "double"
+          },
+          "shipmentFeeVatPercent": {
+            "type": "number",
+            "description": "VAT percentage for shipping fee",
+            "example": 25
+          },
+          "deliveryDate": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2021-01-01T00:00:00.000Z",
+            "description": "Delivery date for the order"
+          },
+          "totalSumInclVat": {
+            "type": "number",
+            "description": "Total sum, including VAT",
+            "example": 1000,
+            "format": "double"
+          },
+          "totalSumExclVat": {
+            "type": "number",
+            "description": "Total sum, excluding VAT",
+            "example": 800,
+            "format": "double"
+          },
+          "customer": {
+            "type": "object",
+            "description": "Information about the customer",
+            "required": [
+              "name",
+              "invoiceAddress",
+              "deliveryAddress"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Customer name. Should be company name if customerType = 2.",
+                "example": "Anna Andersson"
+              },
+              "companyReference": {
+                "type": "string",
+                "description": "Company reference"
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "example": "email@e37.se",
+                "description": "Email address"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Phone number"
+              },
+              "mobilePhone": {
+                "type": "string",
+                "description": "Mobile phone number"
+              },
+              "invoiceAddress": {
+                "type": "object",
+                "required": [
+                  "address1",
+                  "zip",
+                  "city",
+                  "countryCode"
+                ],
+                "properties": {
+                  "address1": {
+                    "type": "string",
+                    "description": "Address line 1"
+                  },
+                  "address2": {
+                    "type": "string",
+                    "description": "Address line 2"
+                  },
+                  "zip": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Zip / postal code"
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "countryCode": {
+                    "type": "string",
+                    "description": "Country code in ISO two letter format.",
+                    "maxLength": 2,
+                    "example": "se"
+                  }
+                }
+              },
+              "deliveryAddress": {
+                "type": "object",
+                "required": [
+                  "address1",
+                  "zip",
+                  "city",
+                  "countryCode",
+                  "deliveryName"
+                ],
+                "properties": {
+                  "address1": {
+                    "type": "string",
+                    "description": "Address line 1"
+                  },
+                  "address2": {
+                    "type": "string",
+                    "description": "Address line 2"
+                  },
+                  "zip": {
+                    "type": "string",
+                    "description": "Zip / postal code"
+                  },
+                  "city": {
+                    "type": "string",
+                    "description": ""
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "countryCode": {
+                    "type": "string",
+                    "maxLength": 2,
+                    "example": "se",
+                    "description": "Country code in ISO two letter format."
+                  },
+                  "deliveryPhone": {
+                    "type": "string"
+                  },
+                  "deliveryName": {
+                    "type": "string",
+                    "description": "Customer name for the delivery address. Should be a company name if customerType = 2."
+                  }
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "uniqueItems": false,
+            "minItems": 1,
+            "description": "Order rows",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": {
+                  "type": "string",
+                  "description": "SKU of the product in the webshop. Required if no EAN is provided."
+                },
+                "ean": {
+                  "type": "string",
+                  "description": "EAN / Gtin of the product in webshop. Required if no SKU is provided."
+                },
+                "productName": {
+                  "type": "string",
+                  "description": "Name of the product. Leave empty to use the product's name from the webshop."
+                },
+                "quantity": {
+                  "type": "number",
+                  "description": "Quantity ordered."
+                },
+                "priceInclVat": {
+                  "type": "number",
+                  "description": "Unit price, including VAT."
+                },
+                "priceExclVat": {
+                  "type": "number",
+                  "description": "Unit price, excluding VAT."
+                },
+                "vatPercent": {
+                  "type": "number",
+                  "description": "VAT percentage for unit price."
+                }
+              },
+              "required": [
+                "quantity",
+                "priceInclVat",
+                "priceExclVat",
+                "vatPercent"
+              ]
+            }
+          }
+        },
+        "required": [
+          "orderNumber",
+          "orderDate",
+          "customerType",
+          "currencyCode",
+          "countryCode",
+          "shipmentFeeInclVat",
+          "shipmentFeeExclVat",
+          "shipmentFeeVatPercent",
+          "totalSumInclVat",
+          "totalSumExclVat",
+          "customer",
+          "rows"
+        ],
+        "title": "MarketplaceOrder"
+      },
+      "Order": {
+        "description": "",
+        "type": "object",
+        "x-examples": {
+          "example-1": {
+            "id": 7779,
+            "timestamp": "2022-01-14T12:07:39.827",
+            "synced": false,
+            "erpOrderNumber": null,
+            "languageCode": "sv",
+            "currencyCode": "sek",
+            "externalOrder": null,
+            "site": {
+              "id": "1",
+              "name": "E37 Utveckling"
+            },
+            "orderStatus": {
+              "id": "NEWORDER",
+              "name": "NewOrder"
+            },
+            "customer": {
+              "customerNumber": "W500103",
+              "type": 1,
+              "newCustomer": false,
+              "acceptsMarketing": false,
+              "email": "daniel@e37.se",
+              "phone": "+46738111049",
+              "mobilePhone": "0738111049",
+              "invoiceAddress": {
+                "name": "Daniel Gamvik",
+                "address1": "c/o Personen 1",
+                "address2": "Drottninggatan 90B 1 Tr.",
+                "zipCode": "11136",
+                "city": "Stockholm",
+                "countryCode": "SE"
+              },
+              "deliveryAddress": {
+                "name": "Daniel Gamvik",
+                "address1": "c/o Personen 1",
+                "address2": "Drottninggatan 90B 1 Tr.",
+                "zipCode": "11136",
+                "city": "Stockholm",
+                "countryCode": "SE"
+              }
+            },
+            "payment": {
+              "paymentMethod": "Klarna Checkout V3",
+              "reference": "D2KW62F5",
+              "status": "NOT_ACTIVATED",
+              "feeExclVat": 0,
+              "feeInclVat": 0,
+              "feeVatAmount": 0
+            },
+            "delivery": {
+              "deliveryMethod": "Budbee Box",
+              "feeExclVat": 15.2,
+              "feeInclVat": 19,
+              "feeVatAmount": 3.8,
+              "deliveryDate": null,
+              "pickupDate": null,
+              "tms": {
+                "sent": false,
+                "sentTimestamp": null,
+                "serviceID": null
+              }
+            },
+            "pickupLocation": {
+              "id": "BOX2262",
+              "type": 1,
+              "name": "Drottninggatan Indiska",
+              "address": "Drottninggatan 53",
+              "zipCode": "111 22",
+              "city": "Stockholm"
+            },
+            "ipAddress": "::1",
+            "message": "After order-SP waz here!",
+            "totalSumInclVat": 14104,
+            "totalSumExclVat": 11283.2,
+            "vatSum": 2820.8,
+            "totalWeight": 3000,
+            "rows": [
+              {
+                "id": 19655,
+                "sku": "092202-004",
+                "title": "Aspect 40",
+                "matrices": "Grön, Medium",
+                "supplierSKU": null,
+                "manufacturerSKU": null,
+                "quantity": 3,
+                "vatPercentage": 25,
+                "priceInclVat": 4695,
+                "priceExclVat": 3756,
+                "sumInclVat": 14085,
+                "sumExclVat": 11268,
+                "regularPriceInclVat": 5490,
+                "regularPriceExclVat": 4392,
+                "regularSumInclVat": 16470,
+                "regularSumExclVat": 13176,
+                "unit": "st",
+                "trademark": "Scott",
+                "weight": 1000,
+                "additionalInfo": null,
+                "inStock": true,
+                "stockInfo": "Fanns i lager vid ordertillfället",
+                "attachment": null,
+                "returnQuantityAccepted": 0,
+                "returnQuantityPending": 0,
+                "isPackageRoot": false,
+                "subRows": []
+              }
+            ]
+          }
+        },
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "E37 order number"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "Timestamp when order was created.",
+            "format": "date-time"
+          },
+          "synced": {
+            "type": "boolean",
+            "description": "if order is synced to ERP."
+          },
+          "erpOrderNumber": {
+            "type": "string",
+            "description": "Order number from ERP"
+          },
+          "languageCode": {
+            "type": "string"
+          },
+          "currencyCode": {
+            "type": "string",
+            "description": "Order currency code"
+          },
+          "externalOrder": {
+            "type": "object",
+            "description": "If external order",
+            "properties": {
+              "source": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "externalOrderNumber": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp for external order."
+              }
+            }
+          },
+          "site": {
+            "type": "object",
+            "description": "Order placed on website.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "orderStatus": {
+            "type": "object",
+            "description": "Current order status.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "customer": {
+            "type": "object",
+            "description": "Customer info.",
+            "properties": {
+              "customerNumber": {
+                "type": "string"
+              },
+              "type": {
+                "description": "Type of customer.\n* 1: Individual\n* 2: Company",
+                "type": "integer"
+              },
+              "newCustomer": {
+                "type": "boolean",
+                "description": "If a new customer was created."
+              },
+              "acceptsMarketing": {
+                "type": "boolean",
+                "description": "If customer accepts marketing."
+              },
+              "email": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "mobilePhone": {
+                "type": "string"
+              },
+              "invoiceAddress": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "address1": {
+                    "type": "string"
+                  },
+                  "address2": {
+                    "type": "string"
+                  },
+                  "zipCode": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "countryCode": {
+                    "type": "string"
+                  }
+                }
+              },
+              "deliveryAddress": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "address1": {
+                    "type": "string"
+                  },
+                  "address2": {
+                    "type": "string"
+                  },
+                  "zipCode": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "countryCode": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "payment": {
+            "type": "object",
+            "description": "Payment information.",
+            "properties": {
+              "paymentMethod": {
+                "type": "string",
+                "description": "Payment method used."
+              },
+              "reference": {
+                "type": "string",
+                "description": "Payment reference."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVATED",
+                  "CANCELLED",
+                  "NOT_ACTIVATED"
+                ]
+              },
+              "feeExclVat": {
+                "type": "number"
+              },
+              "feeInclVat": {
+                "type": "number"
+              },
+              "feeVatAmount": {
+                "type": "number"
+              }
+            }
+          },
+          "delivery": {
+            "type": "object",
+            "required": [
+              "deliveryMethod",
+              "feeExclVat",
+              "feeInclVat",
+              "feeVatAmount"
+            ],
+            "properties": {
+              "deliveryMethod": {
+                "type": "string",
+                "description": "Delivery method used."
+              },
+              "feeExclVat": {
+                "type": "number"
+              },
+              "feeInclVat": {
+                "type": "number"
+              },
+              "feeVatAmount": {
+                "type": "number"
+              },
+              "deliveryDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "pickupDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "tms": {
+                "type": "object",
+                "properties": {
+                  "sent": {
+                    "type": "boolean",
+                    "description": "Order is sent/activated in TSM system."
+                  },
+                  "sentTimestamp": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "serviceID": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "pickupLocation": {
+            "type": "object",
+            "description": "Selected pickup location.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "number",
+                "description": "Type of pickup location.\n* 0: None\n* 1: Transport company\n* 2: Matrix\n* 3: Location\n* 4: Reseller\n* 5: Time slot"
+              },
+              "name": {
+                "type": "string"
+              },
+              "address": {
+                "type": "string"
+              },
+              "zipCode": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              }
+            }
+          },
+          "ipAddress": {
+            "type": "string",
+            "description": "IP address of customer."
+          },
+          "message": {
+            "type": "string",
+            "description": "Message from customer."
+          },
+          "totalSumInclVat": {
+            "type": "number",
+            "description": "Order total, incl. VAT."
+          },
+          "totalSumExclVat": {
+            "type": "number",
+            "description": "Order total, excl. VAT."
+          },
+          "vatSum": {
+            "type": "number",
+            "description": "Total VAT amount"
+          },
+          "totalWeight": {
+            "type": "number",
+            "description": "Total weight"
+          },
+          "rows": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "description": "Order rows",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number",
+                  "description": "Order row ID"
+                },
+                "sku": {
+                  "type": "string",
+                  "description": "Product SKU"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Product name"
+                },
+                "variant": {
+                  "type": "string",
+                  "description": "Product variant info (matrix values)"
+                },
+                "supplierSKU": {
+                  "type": "string"
+                },
+                "manufacturerSKU": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number",
+                  "description": "Quantity purchased."
+                },
+                "vatPercentage": {
+                  "type": "number"
+                },
+                "priceInclVat": {
+                  "type": "number",
+                  "description": "Price per unit, incl. VAT."
+                },
+                "priceExclVat": {
+                  "type": "number",
+                  "description": "Price per unit, excl. VAT."
+                },
+                "sumInclVat": {
+                  "type": "number",
+                  "description": "Row sum, incl. VAT."
+                },
+                "sumExclVat": {
+                  "type": "number",
+                  "description": "Row sum, excl. VAT."
+                },
+                "regularPriceInclVat": {
+                  "type": "number",
+                  "description": "Regular price per unit (if discount), incl. VAT."
+                },
+                "regularPriceExclVat": {
+                  "type": "number",
+                  "description": "Regular price per unit (if discount), excl. VAT."
+                },
+                "regularSumInclVat": {
+                  "type": "number",
+                  "description": "Regular row sum (if discount), incl. VAT."
+                },
+                "regularSumExclVat": {
+                  "type": "number",
+                  "description": "Regular row sum (if discount), excl. VAT."
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "brand": {
+                  "type": "string"
+                },
+                "weight": {
+                  "type": "number",
+                  "description": "Weight per unit"
+                },
+                "additionalInfo": {
+                  "type": "string"
+                },
+                "inStock": {
+                  "type": "boolean"
+                },
+                "stockInfo": {
+                  "type": "string"
+                },
+                "returnQuantityAccepted": {
+                  "type": "number"
+                },
+                "returnQuantityPending": {
+                  "type": "number"
+                },
+                "isPackageRoot": {
+                  "type": "boolean"
+                },
+                "subRows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "title": "Order"
+      },
+      "GiftCardRequest": {
+        "type": "object",
+        "x-examples": {
+          "Example 1": {
+            "validToDate": "2027-02-01T10:00:00.000Z",
+            "type": 1,
+            "currencyCode": "sek",
+            "value": 350,
+            "externalReference": "AB1234",
+            "vatPercentage": 25,
+            "countryCode": "SE",
+            "siteId": 1
+          }
+        },
+        "examples": [
+          {
+            "validToDate": "2027-02-01T23:59:59Z",
+            "type": 1,
+            "currencyCode": "sek",
+            "value": 350,
+            "externalReference": "AB1234",
+            "vatPercentage": 25,
+            "countryCode": "SE",
+            "siteId": 1
+          }
+        ],
+        "required": [
+          "currencyCode",
+          "value"
+        ],
+        "properties": {
+          "validToDate": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2027-02-01T23:59:59Z",
+            "description": "How long the giftcard should be valid, generated based on store settings if not included."
+          },
+          "type": {
+            "description": "Type of giftcard, 1 = Giftcard, 2 = Credit",
+            "type": "integer",
+            "default": 1
+          },
+          "currencyCode": {
+            "type": "string",
+            "description": "Currency code in ISO three letter format.",
+            "example": "sek"
+          },
+          "value": {
+            "type": "number",
+            "format": "double",
+            "example": 350,
+            "description": "Initial value for the giftcard."
+          },
+          "externalReference": {
+            "type": "string",
+            "description": "A reference added as an internal comment when the giftcard is created."
+          },
+          "vatPercentage": {
+            "type": "number",
+            "format": "double",
+            "default": 0
+          },
+          "countryCode": {
+            "type": "string",
+            "description": "Country code in ISO two letter format, limits the giftcard to one country.",
+            "example": "SE"
+          },
+          "siteId": {
+            "type": "integer",
+            "example": 1,
+            "description": "Limits the giftcard to one website."
+          }
+        }
+      },
+      "GiftCardResponse": {
+        "type": "object",
+        "x-examples": {
+          "Example 1": {
+            "giftCardNumber": "1234-ABCD-5678",
+            "CurrencyCode": "sek",
+            "Value": "350",
+            "ValidToDate": "2027-02-01T10:00:00.000Z"
+          }
+        },
+        "examples": [
+          {
+            "giftCardNumber": "1234-ABCD-5678",
+            "currencyCode": "sek",
+            "value": 350,
+            "validToDate": "2019-08-24T14:15:22Z"
+          }
+        ],
+        "properties": {
+          "giftCardNumber": {
+            "type": "string",
+            "example": "1234-ABCD-5678"
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "sek",
+            "x-stoplight": {
+              "id": "j9dtawitzl44a"
+            }
+          },
+          "value": {
+            "type": "number",
+            "format": "double",
+            "example": 350,
+            "x-stoplight": {
+              "id": "fzxhut13j3i33"
+            }
+          },
+          "validToDate": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2027-08-24T23:59:59Z",
+            "x-stoplight": {
+              "id": "61mtwb5wlzpes"
+            }
+          }
+        }
+      },
+      "Webhook-OrderStatusChanged": {
+        "type": "object",
+        "x-examples": {
+          "example-1": {
+            "OrderID": 0,
+            "ExternalOrderNumber": "",
+            "ExternalOrderNumberExtra": "",
+            "ErpOrderNumber": "",
+            "OrderStatus": {
+              "ID": 0,
+              "Type": "",
+              "Description": ""
+            },
+            "TrackingNumber": "",
+            "TrackingURL": ""
+          }
+        },
+        "description": "This payload with JSON data is sent to the webhook URL registered in E37 Admin on order status changes.",
+        "properties": {
+          "OrderID": {
+            "type": "integer",
+            "description": "E37 order number",
+            "readOnly": true
+          },
+          "ExternalOrderNumber": {
+            "type": "string",
+            "description": "External order number, if external order",
+            "readOnly": true
+          },
+          "ExternalOrderNumberExtra": {
+            "type": "string",
+            "description": "External order number, if external order, for a marketplace hub (eg. Sello)",
+            "readOnly": true
+          },
+          "ErpOrderNumber": {
+            "type": "string",
+            "description": "Order number from ERP",
+            "readOnly": true
+          },
+          "OrderStatus": {
+            "type": "object",
+            "description": "Information about the current order status",
+            "properties": {
+              "ID": {
+                "type": "integer",
+                "description": "* 1: NewOrder\n* 2: Cancelled\n* 3: Delivered\n* 4: PackingSlipPrinted\n* 5: ChangeOrder\n* 6: PartiallyDelivered\n* -1: Custom",
+                "readOnly": true
+              },
+              "Type": {
+                "type": "string",
+                "description": "String representation of the order status",
+                "readOnly": true
+              },
+              "Description": {
+                "type": "string",
+                "description": "String representation of the order status",
+                "readOnly": true
+              }
+            }
+          },
+          "TrackingNumber": {
+            "type": "string",
+            "description": "Tracking number from TMS",
+            "readOnly": true
+          },
+          "TrackingURL": {
+            "type": "string",
+            "description": "Tracking URL from TMS",
+            "readOnly": true
+          }
+        },
+        "examples": [
+          {
+            "OrderID": 0,
+            "ExternalOrderNumber": "string",
+            "ExternalOrderNumberExtra": "string",
+            "ErpOrderNumber": "string",
+            "OrderStatus": {
+              "ID": 0,
+              "Type": "string",
+              "Description": "string"
+            },
+            "TrackingNumber": "string",
+            "TrackingURL": "string"
+          }
+        ],
+        "title": "Webhook - OrderStatusChanged",
+        "x-tags": [
+          "Webhook schemas"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "APIKey": {
+        "type": "http",
+        "scheme": "basic",
+        "description": ""
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Bad Request. Validation error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "description": "",
+              "type": "object",
+              "x-examples": {
+                "example-1": {
+                  "Message": "Model validation error.",
+                  "Fields": [
+                    {
+                      "Field": "order.Rows[0].SKU",
+                      "Messages": [
+                        "At least one of the following fields are required: EAN, SKU"
+                      ]
+                    },
+                    {
+                      "Field": "order.Rows[0].Quantity",
+                      "Messages": [
+                        "The field Quantity is invalid."
+                      ]
+                    }
+                  ]
+                }
+              },
+              "properties": {
+                "Message": {
+                  "type": "string",
+                  "readOnly": true
+                },
+                "Fields": {
+                  "type": "array",
+                  "uniqueItems": false,
+                  "description": "List of fields with validation error.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Field": {
+                        "type": "string",
+                        "description": "Field with validation error",
+                        "readOnly": true
+                      },
+                      "Messages": {
+                        "type": "array",
+                        "description": "List of error messages for this field.",
+                        "items": {
+                          "type": "string",
+                          "readOnly": true
+                        },
+                        "readOnly": true
+                      }
+                    },
+                    "required": [
+                      "Field"
+                    ],
+                    "readOnly": true
+                  },
+                  "readOnly": true
+                }
+              },
+              "required": [
+                "Message",
+                "Fields"
+              ]
+            },
+            "examples": {}
+          }
+        }
+      },
+      "GeneralError": {
+        "description": "General error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "requestBodies": {}
+  },
+  "security": [
+    {
+      "APIKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Orders"
+    }
+  ]
+}
