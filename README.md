@@ -24,7 +24,7 @@ Kräver Python 3.9+. Inga tredjepartsberoenden.
 ## Använd
 
 ```
-e37 accounts             konfigurerade butiker (aldrig nyckeln)
+e37 account list         dina E37-instanser (aldrig nycklarna), add/remove
 
 e37 order flow           orderflödesrapporten, föregående stängda halvtimme
 e37 order flow --from '2026-10-07 08:00' --to '2026-10-07 09:00'
@@ -42,25 +42,38 @@ e37 shop tools           serverns egen verktygslista med argument
 Alla kommandon tar `--json` för rådata. `--shop addnature|outdoorexperten|<URL>`
 väljer butik för `shop`; standard är `$E37_MCP_URL`, annars Addnature.
 
-## Nycklar
+## Konton och nycklar
 
-`e37 order` läser butikerna i den här ordningen:
+E37-inloggningar är personliga: en API-nyckel någon skapat, och e-post och lösenord
+till ett eget adminkonto. De sparas därför i din egen nyckelring, aldrig i en fil
+och aldrig i repot:
 
-1. Miljövariabler för en butik: `E37_ACCOUNT`, `E37_WEBSHOP_ID`, `E37_API_KEY`,
-   valfritt `E37_ADMIN_BASE_URL` (standard `https://admin3.e37.se/api`).
-2. `%LOCALAPPDATA%\e37\accounts.json` (eller `~/.config/e37/accounts.json`,
-   eller sökvägen i `E37_CONFIG`):
+- **Windows:** Credential Manager (`e37-cli:<namn>` under Windows-autentiseringsuppgifter)
+- **macOS:** nyckelringen (tjänst `e37-cli`, konto `<namn>`)
 
-```json
-{"accounts": [
-  {"name": "cykloteket", "webshopId": "…", "key": "…"},
-  {"name": "bikester", "account": "…", "webshopId": "…", "key": "…", "baseUrl": "https://admin2.e37.se/api"}
-]}
+En post per E37-instans. Flera instanser, även från olika bolag, kan ligga sida vid sida.
+
+```
+e37 account add vartex-outdoor    frågar efter webbshop-ID, API-bas, rapport-slug,
+                                  API-nyckel och webbinloggning; Enter behåller värdet
+e37 account list                  instanserna, och vilka hemligheter som finns (aldrig värdena)
+e37 account remove vartex-outdoor
 ```
 
-`account` är E37:s slug för rapporten och är som standard samma som `name`.
-`webshopId` behövs bara för REST-API:t (`show`, `status`). Nyckeln checkas aldrig
-in. Originalet ligger i `wesports-secrets`.
+Hemligheter matas in dolt och hamnar aldrig i argv eller skalhistoriken. För
+skript går det att pipa in posten som JSON:
+
+```
+{"webshopId": "…", "baseUrl": "https://admin2.e37.se/api", "account": "…",
+ "key": "…", "web": {"email": "…", "password": "…"}}
+```
+
+Allt utom namnet är valfritt. Rapporten behöver `key`, REST-API:t även `webshopId`,
+och webbgränssnittet `web`. `account` är E37:s slug för rapporten och är som
+standard samma som namnet.
+
+För CI eller ett engångsskript går miljövariabler före nyckelringen: `E37_ACCOUNT`,
+`E37_WEBSHOP_ID`, `E37_API_KEY` och valfritt `E37_ADMIN_BASE_URL`.
 
 ## Dokumentation
 

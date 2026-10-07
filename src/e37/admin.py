@@ -17,12 +17,16 @@ THE KEY IN THE URL. The report endpoint wants the key in the query string, where
 it lands in every log between here and E37. This module therefore never prints
 a request URL, and every error it raises is built from the path alone.
 
-CREDENTIALS. Resolution order, same shape as `wsg ongoing`:
+CREDENTIALS. E37 logins are personal, so they live in the user's own keychain
+(see keychain.py), one entry per E37 instance, never in a file. Resolution order:
 
-  1. E37_ACCOUNT / E37_WEBSHOP_ID / E37_API_KEY / E37_ADMIN_BASE_URL — one shop
-  2. %LOCALAPPDATA%\\e37\\accounts.json (or ~/.config/e37/accounts.json), which is
-     {"accounts": [{"name", "account", "webshopId", "key", "baseUrl"}, ...]}
-     Override the path with E37_CONFIG.
+  1. E37_ACCOUNT / E37_WEBSHOP_ID / E37_API_KEY / E37_ADMIN_BASE_URL — one shop,
+     for CI or a one-off script
+  2. the keychain, filled with `e37 account add NAME`
+
+An entry is {"webshopId", "baseUrl", "account", "key", "web": {"email",
+"password"}}. Every part but the name is optional and checked where it is used:
+the report needs `key`, the REST API also `webshopId`, the web UI `web`.
 
 `name` is what you type on the command line; `account` is E37's slug for the
 report. They are usually the same, so `account` defaults to `name`. Whether one
@@ -37,12 +41,12 @@ machine's local clock — which is Swedish time on every machine that runs this.
 import base64
 import json
 import os
+import re
 from datetime import datetime, timedelta
-from pathlib import Path
 from urllib import parse, request
 from urllib.error import HTTPError, URLError
 
-from . import E37Error, __version__
+from . import E37Error, __version__, keychain
 
 USER_AGENT = f"e37-cli/{__version__} (+https://github.com/Wesports-Scandinavia-AB/e37-cli)"
 DEFAULT_BASE_URL = "https://admin3.e37.se/api"
@@ -58,61 +62,49 @@ ORDER_STATUS = {
 }
 
 
-def config_path():
-    override = os.environ.get("E37_CONFIG")
-    if override:
-        return Path(override)
-    base = os.environ.get("LOCALAPPDATA")
-    return Path(base) / "e37" / "accounts.json" if base else Path.home() / ".config" / "e37" / "accounts.json"
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
 
 def accounts():
-    """Every configured shop, environment first.
+    """Every configured instance, environment first.
 
-    A half configured shop fails loudly instead of falling back to another one:
-    reading the wrong shop's orders is a mistake nothing downstream would reveal.
+    A half configured instance fails loudly where it is used instead of falling
+    back to another one: reading the wrong shop's orders is a mistake nothing
+    downstream would reveal.
     """
     env_key = os.environ.get("E37_API_KEY")
     if env_key:
         name = os.environ.get("E37_ACCOUNT") or "env"
-        return [_checked({
-            "name": name,
+        return [_checked(name, {
             "account": os.environ.get("E37_ACCOUNT"),
             "webshopId": os.environ.get("E37_WEBSHOP_ID"),
             "key": env_key,
             "baseUrl": os.environ.get("E37_ADMIN_BASE_URL"),
         })]
 
-    p = config_path()
-    if not p.exists():
-        raise E37Error(
-            f"Ingen E37-konfiguration. Sätt E37_ACCOUNT/E37_WEBSHOP_ID/E37_API_KEY, "
-            f"eller skapa {p} med "
-            '{"accounts": [{"name": "cykloteket", "webshopId": "...", "key": "..."}]}'
-        )
-    try:
-        # utf-8-sig: PowerShell 5.1 and friends put a BOM in front, and a strict
-        # utf-8 read rejects the whole file over it.
-        raw = json.loads(p.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError) as e:
-        raise E37Error(f"Kunde inte läsa {p}: {e}")
-    rows = raw.get("accounts") if isinstance(raw, dict) else raw
-    if not rows:
-        raise E37Error(f"{p} innehåller inga konton under 'accounts'.")
-    return [_checked(r) for r in rows]
+    names = keychain.names()
+    if not names:
+        raise E37Error("Inga E37-konton. Lägg till ett med: e37 account add NAMN "
+                       "(eller sätt E37_ACCOUNT/E37_WEBSHOP_ID/E37_API_KEY).")
+    return [_checked(n, keychain.get(n) or {}) for n in names]
 
 
-def _checked(a):
-    if not a.get("name") or not a.get("key"):
-        raise E37Error(f"E37-kontot {a.get('name') or '?'} saknar name eller key.")
+def _checked(name, a):
+    web = a.get("web") or {}
     return {
-        "name": a["name"],
-        "account": a.get("account") or a["name"],
-        # Only the REST API needs it; the report works without. Checked where used.
+        "name": name,
+        "account": a.get("account") or name,
         "webshopId": str(a["webshopId"]) if a.get("webshopId") else None,
-        "key": a["key"],
+        "key": a.get("key") or None,
         "baseUrl": str(a.get("baseUrl") or DEFAULT_BASE_URL).rstrip("/"),
+        "web": {"email": web.get("email"), "password": web.get("password")} if web.get("email") else None,
     }
+
+
+def _need_key(account):
+    if not account["key"]:
+        raise E37Error(f"E37-kontot {account['name']} saknar API-nyckel. "
+                       f"Lägg till den med: e37 account add {account['name']}")
 
 
 def resolve_account(ref=None):
@@ -133,6 +125,7 @@ def resolve_account(ref=None):
 def _get(account, path, params=None, basic=False, timeout=60):
     url = account["baseUrl"] + path + ("?" + parse.urlencode(params) if params else "")
     headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+    _need_key(account)
     if basic:
         if not account["webshopId"]:
             raise E37Error(f"E37-kontot {account['name']} saknar webshopId, som REST-API:t kräver.")

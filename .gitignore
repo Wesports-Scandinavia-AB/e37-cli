@@ -1,7 +1,6 @@
 # secrets
 .env
 .env.*
-accounts.json
 
 # python
 __pycache__/

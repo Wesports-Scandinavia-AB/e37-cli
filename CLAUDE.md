@@ -8,8 +8,9 @@ standardbiblioteket, argparse, entry point `e37`.
 
 - Inga tredjepartsberoenden i kärnan. `urllib` och `json` räcker för Admin-API:t och MCP:n, som båda svarar JSON. Samma beslut som i wsg-cli.
 - Undantag: modulen mot E37 Admin-webben (ASP.NET WebForms) använder Scrapling, som det valfria tillägget `e37-cli[web]`. Importera det inne i den modulen, aldrig från `cli.py` på toppnivå, så att `e37 shop` och `e37 order` fungerar utan det. Beslut 2026-10-07.
-- Inga hemligheter i repot. Nycklar ligger i miljövariabler eller i `%LOCALAPPDATA%\e37\accounts.json`. Originalet finns i `wesports-secrets`.
-- Flera E37-instanser används samtidigt (olika webbshop-ID, olika bolag). Ingen global state och ingen standardinstans. Allt går via ett konto från `admin.resolve_account`, och webbsessioner delas aldrig mellan körningar. Se "Flera instanser samtidigt" i `docs/web.md`.
+- Inga hemligheter i repot eller i filer. E37-inloggningar är personliga och ligger i användarens nyckelring via `src/e37/keychain.py`: Credential Manager på Windows, nyckelringen på macOS. Inte i Arena-valvet, som är för bolagets maskinhemligheter. Miljövariabler `E37_*` går före, för CI.
+- Ett hemligt värde passerar aldrig argv. Det läses med `getpass` eller från stdin. På macOS skrivs det via `security -i` och stdin, hex-kodat.
+- Flera E37-instanser används samtidigt (olika webbshop-ID, olika bolag). Ingen global state och ingen standardinstans. Allt går via ett konto från `admin.resolve_account` (en nyckelringspost per instans), och webbsessioner delas aldrig mellan körningar. Se "Flera instanser samtidigt" i `docs/web.md`.
 - Rapport-endpointen tar nyckeln i URL:en. Skriv aldrig ut en request-URL och bygg aldrig ett felmeddelande av den.
 - Språk: dokumentation och utskrifter till användaren på svenska. Kod, kommentarer och `--help` på engelska.
 - Dokumentera API-detaljer och beslut i `docs/` allteftersom de blir kända. Rätta `docs/` när ett live-svar säger något annat.
@@ -18,6 +19,7 @@ standardbiblioteket, argparse, entry point `e37`.
 
 - `src/e37/admin.py`: E37 Admin, alltså orderflödesrapporten (nyckel i query) och Triton Admin REST API (Basic: webshop-ID och nyckel). Läser bara.
 - `src/e37/shop.py`: butikens publika MCP-server (`/api/mcp`), JSON-RPC utan auth. Kräver en egen User-Agent; urllibs standard får 403.
+- `src/e37/keychain.py`: OS-nyckelringen, en post per E37-instans. Windows via ctypes/advapi32, macOS via `/usr/bin/security`.
 - `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
 - `docs/`: Order-API, OpenAPI-spec, MCP, webbgränssnittet (`docs/web.md`).
 

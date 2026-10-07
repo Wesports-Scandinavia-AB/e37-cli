@@ -3,7 +3,7 @@ import json
 import sys
 from datetime import datetime
 
-from . import E37Error, admin, shop
+from . import E37Error, admin, keychain, shop
 
 
 def _dump(data):
@@ -17,17 +17,84 @@ def _when(s):
         raise argparse.ArgumentTypeError(f"väntade 'ÅÅÅÅ-MM-DD TT:MM', fick {s!r}")
 
 
-# ---- accounts ----------------------------------------------------------------
+# ---- account -----------------------------------------------------------------
 
-def cmd_accounts(a):
+def _public(r):
+    """An account as it may be shown: which secrets exist, never their values."""
+    return {
+        "name": r["name"], "account": r["account"], "webshopId": r["webshopId"], "baseUrl": r["baseUrl"],
+        "apiKey": bool(r["key"]), "webEmail": (r["web"] or {}).get("email"),
+    }
+
+
+def cmd_account_list(a):
     rows = admin.accounts()
     if a.json:
-        _dump([{k: v for k, v in r.items() if k != "key"} for r in rows])
+        _dump([_public(r) for r in rows])
         return 0
-    print(f"konfiguration  {admin.config_path()}\n")
-    for r in rows:
-        print(f"{r['name']:<16} account={r['account']:<16} webshopId={r['webshopId'] or '-':<8} {r['baseUrl']}")
+    print(f"lagras i  {keychain.backend() or 'miljövariabler'}\n")
+    for r in map(_public, rows):
+        print(f"{r['name']:<16} webshopId={r['webshopId'] or '-':<8} nyckel={'ja' if r['apiKey'] else 'nej':<4} "
+              f"webb={r['webEmail'] or '-':<28} {r['baseUrl']}")
     return 0
+
+
+def _ask(label, current, secret=False):
+    """Prompt once; Enter keeps the current value. Secrets never echo or print."""
+    import getpass
+    hint = (" [sparad]" if current else "") if secret else (f" [{current}]" if current else "")
+    prompt = f"{label}{hint}: "
+    # getpass writes its prompt to the terminal itself; input() needs stderr so
+    # that stdout stays clean for anyone capturing it.
+    if secret:
+        value = getpass.getpass(prompt)
+    else:
+        print(prompt, end="", file=sys.stderr, flush=True)
+        value = sys.stdin.readline().strip()
+    return value.strip() or current
+
+
+def cmd_account_add(a):
+    """Create or update one instance in the keychain.
+
+    Interactive by default, with secrets read through getpass so they never reach
+    the screen, the shell history or argv. Piped JSON is the scripted path — the
+    same shape the keychain holds — and replaces the entry whole.
+    """
+    if not admin.NAME_RE.match(a.name):
+        print("Namnet får bara innehålla a–z, 0–9 och bindestreck, t.ex. vartex-outdoor.", file=sys.stderr)
+        return 2
+    if not sys.stdin.isatty():
+        try:
+            entry = json.loads(sys.stdin.read().lstrip("﻿"))
+        except ValueError as e:
+            print(f"Väntade JSON på stdin: {e}", file=sys.stderr)
+            return 2
+    else:
+        old = keychain.get(a.name) or {}
+        web = old.get("web") or {}
+        print(f"E37-konto {a.name} ({'uppdateras' if old else 'nytt'}). Enter behåller värdet.", file=sys.stderr)
+        entry = {
+            "webshopId": _ask("Webbshop-ID", old.get("webshopId")),
+            "baseUrl": _ask("API-bas", old.get("baseUrl") or admin.DEFAULT_BASE_URL),
+            "account": _ask("Rapport-slug", old.get("account") or a.name),
+            "key": _ask("API-nyckel", old.get("key"), secret=True),
+        }
+        email = _ask("Webbinloggning, e-post", web.get("email"))
+        if email:
+            entry["web"] = {"email": email, "password": _ask("Webbinloggning, lösenord", web.get("password"), secret=True)}
+    entry = {k: v for k, v in entry.items() if v}
+    keychain.put(a.name, entry)
+    print(f"Sparat {a.name} i {keychain.backend()}.", file=sys.stderr)
+    return 0
+
+
+def cmd_account_remove(a):
+    if keychain.delete(a.name):
+        print(f"Tog bort {a.name} ur {keychain.backend()}.")
+        return 0
+    print(f"Inget konto {a.name}.", file=sys.stderr)
+    return 1
 
 
 # ---- order -------------------------------------------------------------------
@@ -239,9 +306,17 @@ def main(argv=None):
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("accounts", help="the configured shops (never the key)")
+    ac = sub.add_parser("account", help="E37 instances in your OS keychain (personal logins)")
+    acs = ac.add_subparsers(dest="account_cmd", required=True)
+    s = acs.add_parser("list", help="instances and which secrets they have (never the values)")
     _json_flag(s)
-    s.set_defaults(fn=cmd_accounts)
+    s.set_defaults(fn=cmd_account_list)
+    s = acs.add_parser("add", help="create or update one, prompts; or pipe JSON on stdin")
+    s.add_argument("name", help="your name for the instance, e.g. vartex-outdoor")
+    s.set_defaults(fn=cmd_account_add)
+    s = acs.add_parser("remove", help="delete one from the keychain")
+    s.add_argument("name")
+    s.set_defaults(fn=cmd_account_remove)
 
     o = sub.add_parser("order", help="E37 Admin: order flow report and the REST API")
     _add_order_commands(o.add_subparsers(dest="order_cmd", required=True))
