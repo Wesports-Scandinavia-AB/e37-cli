@@ -1,22 +1,27 @@
-# e37
+# e37-cli
 
-Samlingsrepo för E37-integrationer (API-anrop, MCP-server, dokumentation).
+Python-CLI och bibliotek för E37, webbshopsplattformen bakom Cykloteket, Bikester,
+Addnature, Outdoorexperten med flera. Byggt som `wsg-cli`: `src/`-layout, bara
+standardbiblioteket, argparse, entry point `e37`.
 
 ## Regler
 
-- Inga hemligheter i repot. Nycklar och tokens ligger i `.env` (gitignorerad) eller i `wesports-secrets`.
-- Dokumentera API-detaljer och beslut i `docs/` allteftersom de blir kända.
-- Språk i dokumentation: svenska. Kod och kommentarer i kod: engelska.
-
-## Status
-
-Repot är nystartat (2026-09-03). E37 är webbshopsplattformen bakom addnature.com och outdoorexperten.se. Deras publika MCP-server är dokumenterad i `docs/mcp.md`. Order-API:t (orderflödesrapport, Triton Admin REST API, webhook) i `docs/order-api.md` med OpenAPI-spec bredvid. API-nyckel saknas ännu; nyckelskapande i E37 Admin felar och Tommy har kontakt med E37.
+- Inga tredjepartsberoenden. `urllib` och `json` räcker. Samma beslut som i wsg-cli.
+- Inga hemligheter i repot. Nycklar ligger i miljövariabler eller i `%LOCALAPPDATA%\e37\accounts.json`. Originalet finns i `wesports-secrets`.
+- Rapport-endpointen tar nyckeln i URL:en. Skriv aldrig ut en request-URL och bygg aldrig ett felmeddelande av den.
+- Språk: dokumentation och utskrifter till användaren på svenska. Kod, kommentarer och `--help` på engelska.
+- Dokumentera API-detaljer och beslut i `docs/` allteftersom de blir kända. Rätta `docs/` när ett live-svar säger något annat.
 
 ## Struktur
 
-- `client/api/` – typad klient mot E37:s officiella API. Föredra alltid denna.
-- `client/web/` – klient mot E37:s webbgränssnitt, bara för luckor i API:et. Webben är ASP.NET WebForms (ViewState, POST-backs, inga JSON-endpoints); se `client/web/README.md`. Skör; dokumentera vilken lucka varje funktion täcker.
-- `mcp/` – MCP-server. Importerar `client/`, duplicerar inte anrop.
-- `docs/` – dokumentation och beslut.
+- `src/e37/admin.py`: E37 Admin, alltså orderflödesrapporten (nyckel i query) och Triton Admin REST API (Basic: webshop-ID och nyckel). Läser bara.
+- `src/e37/shop.py`: butikens publika MCP-server (`/api/mcp`), JSON-RPC utan auth. Kräver en egen User-Agent; urllibs standard får 403.
+- `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
+- `docs/`: Order-API, OpenAPI-spec, MCP, webbgränssnittet (`docs/web.md`).
 
-Platt struktur medvetet. Flytta till `packages/` först när ett tredje paket behövs.
+Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som moduler i `src/e37/` när de behövs, inte som egna paket.
+
+## Status (2026-10-07)
+
+- `e37 shop` fungerar mot Addnature och Outdoorexperten.
+- `e37 order` är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel. Nyckelskapande i E37 Admin felar och Tommy har kontakt med E37. Både `/reports/orderflow` och `/orders/{id}/status` på admin3 svarar 401 på en ogiltig nyckel, så sökvägarna stämmer.

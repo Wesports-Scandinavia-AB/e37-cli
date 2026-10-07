@@ -1,13 +1,14 @@
 # secrets
 .env
 .env.*
-!.env.example
+accounts.json
 
-# deps / build
-node_modules/
+# python
+__pycache__/
+*.egg-info/
+build/
 dist/
-.wrangler/
-.dev.vars
+.venv/
 
 # os / editor
 .DS_Store

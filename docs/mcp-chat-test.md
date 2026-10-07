@@ -41,7 +41,7 @@ Servern fungerar tekniskt och räcker för "hitta produkter som matchar ett sök
 
 Sökning `tvåmannatält` gav 4 träffar, varav ett enmanstält och två slutsålda. Breddning till `tält 2P` fungerade bäst av allt jag provade och gav Marmot Superalloy 2P (5 289 kr, 1 020 g enligt beskrivningen), Marmot Trailfin 2P, m.fl. För att svara på "under 4 000 kr" måste LLM:en hämta upp till 100 träffar, parsa prissträngen och filtrera själv.
 
-## Rekommendation för vår MCP i `mcp/`
+## Rekommendation för vår egen MCP
 
 Om vi bygger en egen MCP-server ovanpå E37 bör den kompensera för ovanstående:
 
@@ -93,4 +93,4 @@ Frågan ställdes 2026-09-03. Slutsats: koppla inte in den direkt.
 
 **Rekommendation**
 
-Lägg vår egen MCP i `mcp/` mellan Zendesk och E37. Den ska hålla `max_nr_of_products` lågt, normalisera sökord till 1–2 nyckelord, söka igen på engelska vid noll träffar, filtrera bort tillbehör, parsa pris till tal, och exponera orderuppslag från Order-API:t så snart nyckeln finns. Kontrollera också om Zendesks AI-agent kan konsumera en extern MCP-server; annars behöver vår server även ett vanligt HTTP-API.
+Lägg vår egen MCP, som modul i `src/e37/`, mellan Zendesk och E37. Den ska hålla `max_nr_of_products` lågt, normalisera sökord till 1–2 nyckelord, söka igen på engelska vid noll träffar, filtrera bort tillbehör, parsa pris till tal, och exponera orderuppslag från Order-API:t så snart nyckeln finns. Kontrollera också om Zendesks AI-agent kan konsumera en extern MCP-server; annars behöver vår server även ett vanligt HTTP-API.

@@ -1,6 +1,6 @@
-# client/web
+# E37:s webbgränssnitt
 
-Klient som gör saker i E37:s webbgränssnitt som inte går via API:et.
+Anteckningar inför en modul i `src/e37/` som gör det i E37 Admin som API:et inte kan. Den finns inte än.
 
 ## Vad vi vet om webben
 
@@ -14,12 +14,12 @@ E37:s webb är byggd på ASP.NET WebForms, inte JSON-endpoints. Det innebär:
 
 ## Rekommenderad ansats
 
-1. **Först: `fetch` med cookie-jar och HTML-parsning.** Hämta sidan, parsa med t.ex. cheerio, bygg POST-body med ViewState-fälten och `__EVENTTARGET` för den kontroll som ska "klickas", skicka som `application/x-www-form-urlencoded`. Snabbt, billigt och körbart i en Worker.
+1. **Först: `urllib` med `http.cookiejar` och `html.parser`.** Hämta sidan, plocka ut de dolda fälten, bygg POST-body med ViewState-fälten och `__EVENTTARGET` för den kontroll som ska "klickas", skicka som `application/x-www-form-urlencoded`. Ryms i standardbiblioteket, som resten av paketet.
 2. **Bara om det inte räcker: browser-automation** (Playwright). Behövs om sidan använder UpdatePanel/AJAX-postbacks med tung klientlogik, eller om det finns bot-skydd.
 
 ## Regler
 
-- Använd bara för det som saknas i `client/api/`.
+- Använd bara för det som saknas i `admin.py`.
 - Dokumentera varje funktion med vilken lucka i API:et den täcker, så att den kan tas bort när API:et hinner ikapp.
 - Hantera att ViewState blir ogiltig (session löpt ut, sida ändrad). Logga in igen och hämta om sidan i stället för att krascha.
 - Spara aldrig sessioncookies i repot.

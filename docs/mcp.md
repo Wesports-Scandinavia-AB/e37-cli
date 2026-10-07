@@ -2,7 +2,7 @@
 
 E37 är webbshopsplattformen bakom bland annat addnature.com och outdoorexperten.se (sessionscookien heter `e37webshopSession`, bilder ligger på `cdn37.se`). Varje butik exponerar en egen MCP-server på samma sökväg.
 
-Undersökt 2026-09-03.
+Undersökt 2026-09-03. Schemat har ändrats sedan dess, se [Ändringar 2026-10-07](#ändringar-2026-10-07). `e37 shop tools` visar vad servern säger just nu.
 
 ## Endpoints
 
@@ -119,3 +119,14 @@ Se `mcp-chat-test.md`. Kort: `categories[]` och `tags[]` har ingen effekt, `max_
 - Beskrivningar kan innehålla HTML-entiteter.
 - Resultatet är på svenska och SE-priser; det finns inga andra språk/länder i schemat i dag.
 - Servern är publik och kräver ingen nyckel, men det är en produktionsbutik. Håll anropsvolymen rimlig.
+
+## Ändringar 2026-10-07
+
+Sett när `e37 shop` byggdes. Avsnitten ovan beskriver läget 2026-09-03 och är fel på följande punkter:
+
+- Produkter har `model_number` och `name` i stället för `sku` och `title`. Varianter har `name` i stället för `title`, och storlekar ligger nu bland varianterna bredvid färgerna.
+- Kategorier, varumärken och facetter har `name` i stället för `title`. Filtren `categories[]` och `brands[]` beskrivs fortfarande som titlar i schemat.
+- `get_product` tar `modelNumber` (föredras, gemensam för alla varianter) eller `gtin` (en variant), inte `sku`. Med `include_specifications: true` kommer `specifications` med, t.ex. färg, material, målgrupp och vikt. Det ger de strukturerade specar som saknades.
+- `sort_by` har inte längre `sku_asc`.
+- Nya verktyg: `list_pages`, `list_blogs`, `list_blog_posts` (`blog_id`).
+- Servern svarar 403 på urllibs standard-User-Agent. Skicka en egen.
