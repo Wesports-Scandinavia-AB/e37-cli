@@ -1,29 +1,118 @@
 # E37:s webbgränssnitt
 
-Anteckningar inför en modul i `src/e37/` som gör det i E37 Admin som API:et inte kan. Den finns inte än.
+Karta över E37 Admin (`https://admin3.e37.se/`) som webbgränssnitt, och hur vi bygger mot det. Underlag för en modul `src/e37/web.py` som gör det API:et inte kan. Modulen finns inte än.
 
-## Vad vi vet om webben
+Selektorer och flöden kommer från North European Trust AB:s repo `e37-automation` (Alexander, kartlagt 2026-10-06 mot Rull SE/DK/FI och Ruller NO). Den koden körs med Playwright och styr ett riktigt webbläsarfönster. Ingenting här är verifierat från vår sida än. Markera det som **[verifierat ÅÅÅÅ-MM-DD]** när vi själva har sett det.
 
-E37:s webb är byggd på ASP.NET WebForms, inte JSON-endpoints. Det innebär:
+## Grunder
+
+E37 Admin är ASP.NET WebForms, inte JSON-endpoints:
 
 - Sidor är server-renderad HTML med ett stort `<form>` per sida.
-- Varje åtkomst är en POST-back med `__VIEWSTATE`, `__VIEWSTATEGENERATOR`, `__EVENTVALIDATION`, `__EVENTTARGET` och `__EVENTARGUMENT`.
-- Man måste alltid först GET:a sidan, plocka ut de dolda fälten, och skicka dem tillbaka i POST:en. Fälten är sidspecifika och ändras mellan requests.
-- Fält heter ofta `ctl00$MainContent$...`. Ta namnen från HTML:en i stället för att hårdkoda dem där det går.
-- Inloggning är en form-POST som ger en sessionscookie (`ASP.NET_SessionId` och/eller `.ASPXAUTH`). Cookien måste följa med i alla anrop.
+- Varje åtgärd är en POST-back med `__VIEWSTATE`, `__VIEWSTATEGENERATOR`, `__EVENTVALIDATION`, `__EVENTTARGET` och `__EVENTARGUMENT`. Sidan måste GET:as först och de dolda fälten skickas tillbaka. De är sidspecifika och ändras mellan requests.
+- Kontroller heter `ctl00$cph1$...` i `name` och `ctl00_cph1_...` i `id`. `cph1` är sidans innehållsplatshållare.
+- Sessionen är en cookie (`ASP.NET_SessionId` och/eller `.ASPXAUTH`) som måste följa med i alla anrop.
+- Sökning och butiksbyte är fullständiga postbacks. Sidan laddas om.
 
-## Rekommenderad ansats
+## Inloggning
 
-Byggs med [Scrapling](https://github.com/D4Vinci/Scrapling), installerat som `pip install e37-cli[web]`. Beslut 2026-10-07: resten av paketet klarar sig på standardbiblioteket, men här behövs cookies, HTML-parsning och kanske en riktig webbläsare.
+| | |
+|---|---|
+| Sida | `login.aspx`. `https://admin3.e37.se/` skickar dit om man inte är inloggad. |
+| Fält | Etiketterna **Webbshop-ID**, **Epost**, **Lösenord** |
+| Knapp | **Logga in** |
+| Lyckad | Sidan efter inloggning har butiksväljaren `#ctl00_ddlSitePicker` |
 
-1. **Först: Scraplings `Fetcher` med session.** Hämta sidan, plocka ut de dolda fälten med selektorer, bygg POST-body med ViewState-fälten och `__EVENTTARGET` för den kontroll som ska "klickas", skicka som `application/x-www-form-urlencoded`.
-2. **Bara om det inte räcker: `DynamicFetcher`/`StealthyFetcher`**, alltså en riktig webbläsare. Behövs om sidan använder UpdatePanel/AJAX-postbacks med tung klientlogik.
+Det är en personlig inloggning (e-post och lösenord), inte API-nyckeln. Webbshop-ID är troligen samma värde som användarnamnet i REST-API:ts Basic-auth (`webshopId` i `accounts.json`), men det är **[overifierat]**. Ett webbshop-ID omfattar flera webbplatser. För NET AB är det Rull SE, Rull DK, Rull FI och Ruller NO.
+
+## Butiksväljaren
+
+| | |
+|---|---|
+| Element | `<select id="ctl00_ddlSitePicker">` |
+| Options | Webbplatsnamn, standardbutiken med suffix: `Rull SE (standard)`, `Rull DK`, `Rull FI`, `Ruller NO`. Matcha med "börjar med". |
+| Synlighet | **Dold** bakom E37:s egen dropdown. Den finns i DOM:en men syns inte. |
+| Byte | Sätt `value` och skicka `change`, så görs en postback. Utan webbläsare blir det en POST med `__EVENTTARGET=ctl00$ddlSitePicker` och det nya värdet. |
+| Kontroll | Läs vald option efter omladdningen. Står den inte på rätt butik, avbryt. |
+
+Butiksvalet är sessionstillstånd på serversidan. Allt som görs efteråt gäller den valda webbplatsen.
+
+## Artikelregistret
+
+| | |
+|---|---|
+| Sida | `workspace/workwith/articles/list.aspx` |
+| Sökfält | `#ctl00_cph1_settingstabs_tabSearch_txtSearch` |
+| Sökknapp | `#btnArticleSearch` (postback) |
+| Huvudartikel | `tr.articleMain`. Fälls ut med `img.articleExpander`, vars `src` innehåller `plus` när raden är hopfälld. |
+| Variant | `tr.av a`. Länktexten är variantens exakta artikelnummer, t.ex. `18-30120542`. |
+
+Sökningen matchar på delsträng. Kräv **exakt** träff på länktexten och exakt en sådan, annars hoppa över artikeln med ett fel. Att utfällningen sker i webbläsaren och inte som postback är **[overifierat]**. Visar det sig att varianterna redan finns i HTML:en kan en ren HTTP-klient läsa dem direkt.
+
+## Variantdialogen
+
+Öppnas genom att klicka på variantlänken. Det är en modal på samma sida, inte en ny URL.
+
+| | |
+|---|---|
+| Rubrik | `Redigera artikelvariant - {artnr}` |
+| Spara och stäng | `#ctl00_cph1_mod1_pnl_usrCtrl_btnSave` |
+| Avbryt | `#ctl00_cph1_mod1_pnl_usrCtrl_btnCancel` |
+| Stängd | Sparknappen blir dold |
+
+`mod1_pnl_usrCtrl` tyder på en UserControl i en UpdatePanel, alltså en AJAX-postback. Det är troligen det som gör att `e37-automation` behöver en riktig webbläsare.
+
+### Kända fält
+
+| Fält i UI | Flik | Selektor | Anmärkning |
+|---|---|---|---|
+| Leverans-/beställningstid, om slut i lager (Alt. 2, fritext) | Lager | `input[type=text][id*="tbDeliveryTimeText_"]` vars id **inte** innehåller `InStock` | Språkbundet. Id:t slutar på språkkod, t.ex. `_sv`. Det finns ett syskonfält med `InStock` i id:t för leveranstid när varan finns i lager. |
+
+Fälten skrivs genom att sätta `value` och skicka `input`, `change`, `keyup` och `blur`. E37 lyssnar på åtminstone ett av dem innan Spara tar värdet.
+
+## Det som saknas i API:et
+
+| Lucka | Varför webben | Källa |
+|---|---|---|
+| Läsa och skriva leveranstidstext per variant och webbplats | Fältet finns inte i Triton Admin REST API, som bara har ordrar och presentkort. Det finns inte heller i E37:s inbyggda export ("Exportera sökresultat", "Exportfiler"). | `e37-automation` |
+
+Fyll på tabellen när fler luckor dyker upp. Varje funktion i `web.py` ska peka hit.
+
+## Att bygga hos oss
+
+Samma förmåga som `e37-automation`, gjord som resten av `e37-cli`:
+
+```
+e37 web login-check                    logga in, lista webbplatserna, logga ut
+e37 web delivery-text get ART...       läs fältet per webbplats, ändrar inget
+e37 web delivery-text set FIL          sätt från CSV/xlsx (art-nr;datum), --dry-run först
+    --sites SE,DK,FI,NO  --limit N  --log FIL.csv
+```
+
+- **Konto:** utöka `accounts.json` med `web: {"email": ..., "password": ...}` per konto. Webbshop-ID tas från `webshopId`. Miljövariabler: `E37_WEB_EMAIL`, `E37_WEB_PASSWORD`. Aldrig i repot och aldrig i loggar eller felsökningsfiler.
+- **Webbplatser och texter:** mallen per webbplats (`Förväntas åter i lager: {date}` och så vidare) är data, inte kod. Lägg den i kontot, eftersom texterna är butikens egna.
+- **Motor:** Scrapling, `e37-cli[web]`. Pröva i den här ordningen:
+  1. `Fetcher` med session och ren POST: inloggning, butiksbyte och sök är vanliga postbacks och bör gå utan webbläsare. Billigt och snabbt, och fungerar på en server.
+  2. Variantdialogen är troligen en UpdatePanel. Den går att posta direkt (`ScriptManager`-fältet, `__ASYNCPOST=true`, svaret i `|`-separerat delta-format), men det är skört. Fungerar det inte, ta `DynamicFetcher` med `page_action` för just det steget.
+- **Säkerhet vid skrivning**, samma regler som `e37-automation` och `wsg`:
+  - `--dry-run` är standard för ny logik. Kör först med `--limit 2`.
+  - Läs tillbaka varje sparat värde. Avvikelse blir `FEL: sparat värde är '...'`.
+  - Ett fel på en artikel loggas och körningen går vidare. Exit 1 om något fel uppstod.
+  - CSV-logg med webbplats, artikel, gammalt värde, nytt värde och status, `;`-separerad, utf-8-sig, så att Excel öppnar den rätt.
+  - Hoppa över det som redan har rätt värde (`oförändrad`) i stället för att spara igen.
+- **Excel utan pandas:** en xlsx-fil är en zip med XML. Två kolumner går att läsa med `zipfile` och `xml.etree`. Tar vi CSV också slipper Alex konvertera.
+- **Felsökning:** spara HTML (inte skärmbilder) i `logs/` när något går fel. Töm lösenordsfält först.
+
+## Att återkoppla till e37-automation
+
+Sett vid genomläsningen 2026-10-07:
+
+- Workflowen skickar `--export` och `CLAUDE.md` beskriver den, men skriptet har ingen sådan flagga. Kryssas *Exportera* i Actions avbryter argparse körningen direkt.
+- Danska texten skiljer sig åt. README säger `Forventes på lager igen`, skriptet och `CLAUDE.md` säger `Forventes tilbage på lager`. Det är skriptets text som hamnar i butiken.
 
 ## Regler
 
 - Använd bara för det som saknas i `admin.py`.
 - Dokumentera varje funktion med vilken lucka i API:et den täcker, så att den kan tas bort när API:et hinner ikapp.
 - Hantera att ViewState blir ogiltig (session löpt ut, sida ändrad). Logga in igen och hämta om sidan i stället för att krascha.
-- Spara aldrig sessioncookies i repot.
-
-Fylls på när det är klart vilka luckor som behöver täckas.
+- Spara aldrig sessioncookies eller inloggningsuppgifter i repot.
