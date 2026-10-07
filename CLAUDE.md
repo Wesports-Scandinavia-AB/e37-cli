@@ -6,7 +6,8 @@ standardbiblioteket, argparse, entry point `e37`.
 
 ## Regler
 
-- Inga tredjepartsberoenden. `urllib` och `json` räcker. Samma beslut som i wsg-cli.
+- Inga tredjepartsberoenden i kärnan. `urllib` och `json` räcker för Admin-API:t och MCP:n, som båda svarar JSON. Samma beslut som i wsg-cli.
+- Undantag: modulen mot E37 Admin-webben (ASP.NET WebForms) använder Scrapling, som det valfria tillägget `e37-cli[web]`. Importera det inne i den modulen, aldrig från `cli.py` på toppnivå, så att `e37 shop` och `e37 order` fungerar utan det. Beslut 2026-10-07.
 - Inga hemligheter i repot. Nycklar ligger i miljövariabler eller i `%LOCALAPPDATA%\e37\accounts.json`. Originalet finns i `wesports-secrets`.
 - Rapport-endpointen tar nyckeln i URL:en. Skriv aldrig ut en request-URL och bygg aldrig ett felmeddelande av den.
 - Språk: dokumentation och utskrifter till användaren på svenska. Kod, kommentarer och `--help` på engelska.

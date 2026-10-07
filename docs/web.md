@@ -14,8 +14,10 @@ E37:s webb är byggd på ASP.NET WebForms, inte JSON-endpoints. Det innebär:
 
 ## Rekommenderad ansats
 
-1. **Först: `urllib` med `http.cookiejar` och `html.parser`.** Hämta sidan, plocka ut de dolda fälten, bygg POST-body med ViewState-fälten och `__EVENTTARGET` för den kontroll som ska "klickas", skicka som `application/x-www-form-urlencoded`. Ryms i standardbiblioteket, som resten av paketet.
-2. **Bara om det inte räcker: browser-automation** (Playwright). Behövs om sidan använder UpdatePanel/AJAX-postbacks med tung klientlogik, eller om det finns bot-skydd.
+Byggs med [Scrapling](https://github.com/D4Vinci/Scrapling), installerat som `pip install e37-cli[web]`. Beslut 2026-10-07: resten av paketet klarar sig på standardbiblioteket, men här behövs cookies, HTML-parsning och kanske en riktig webbläsare.
+
+1. **Först: Scraplings `Fetcher` med session.** Hämta sidan, plocka ut de dolda fälten med selektorer, bygg POST-body med ViewState-fälten och `__EVENTTARGET` för den kontroll som ska "klickas", skicka som `application/x-www-form-urlencoded`.
+2. **Bara om det inte räcker: `DynamicFetcher`/`StealthyFetcher`**, alltså en riktig webbläsare. Behövs om sidan använder UpdatePanel/AJAX-postbacks med tung klientlogik.
 
 ## Regler
 

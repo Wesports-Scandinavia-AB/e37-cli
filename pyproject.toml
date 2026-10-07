@@ -11,6 +11,10 @@ requires-python = ">=3.9"
 license = { text = "MIT" }
 dependencies = []
 
+[project.optional-dependencies]
+# Only the E37 Admin web module (not built yet) uses it; the JSON APIs stay on urllib.
+web = ["scrapling"]
+
 [project.scripts]
 e37 = "e37.cli:main"
 
