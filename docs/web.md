@@ -90,6 +90,12 @@ e37 web delivery-text set FIL          sätt från CSV/xlsx (art-nr;datum), --dr
 ```
 
 - **Konto:** utöka `accounts.json` med `web: {"email": ..., "password": ...}` per konto. Webbshop-ID tas från `webshopId`. Miljövariabler: `E37_WEB_EMAIL`, `E37_WEB_PASSWORD`. Aldrig i repot och aldrig i loggar eller felsökningsfiler.
+- **Flera instanser samtidigt:** vi behöver vara inloggade i flera E37-instanser på en gång, till exempel WeSports egna butiker och NET AB:s Rull-butiker. Varje instans är ett eget konto i `accounts.json` med eget webbshop-ID, egen server (admin2 eller admin3) och egen inloggning. Därför:
+  - **En session per konto.** Det är ett eget `Session`-objekt med egen cookie-jar. Ingenting i `web.py` får vara global state, så att två konton kan köras i samma process eller i varsin.
+  - **Butiksvalet sitter i sessionen på serversidan.** Två jobb mot samma konto som delar session byter butik under fötterna på varandra, och det märks inte förrän fel butik har fått en ändring. Varje körning loggar därför in i en egen session och delar den inte. Kontrollera butiksvalet igen innan varje skrivning, inte bara efter bytet.
+  - **Sessioner sparas inte mellan körningar** i första versionen. Inloggningen är ett enda POST-anrop. Behövs det senare, lägg dem per konto i `%LOCALAPPDATA%\e37\sessions\<konto>.json`, utanför repot och med en lås-fil per konto.
+  - **`--account` är obligatoriskt** för `e37 web` när fler än ett konto är konfigurerat, precis som för `e37 order`. Ingen standardinstans, eftersom en skrivning mot fel instans är det värsta felet modulen kan göra.
+  - **Varje loggrad, CSV-rad och felsökningsfil** tar med kontonamnet, inte bara webbplatsen. Två instanser kan ha webbplatser med samma namn.
 - **Webbplatser och texter:** mallen per webbplats (`Förväntas åter i lager: {date}` och så vidare) är data, inte kod. Lägg den i kontot, eftersom texterna är butikens egna.
 - **Motor:** Scrapling, `e37-cli[web]`. Pröva i den här ordningen:
   1. `Fetcher` med session och ren POST: inloggning, butiksbyte och sök är vanliga postbacks och bör gå utan webbläsare. Billigt och snabbt, och fungerar på en server.
