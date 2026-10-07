@@ -290,7 +290,7 @@ def cmd_update(a):
     url = (f"git+https://github.com/{REPO}" if shutil.which("git")
            else f"https://github.com/{REPO}/archive/refs/heads/main.zip")
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps",
-           "--quiet", f"e37-cli @ {url}"]
+           "--quiet", "--disable-pip-version-check", f"e37-cli @ {url}"]
     if sys.prefix == sys.base_prefix:
         cmd.insert(4, "--user")
     print(f"Hämtar senaste e37-cli (har {__version__}) ...", file=sys.stderr)
