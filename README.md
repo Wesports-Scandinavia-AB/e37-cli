@@ -6,6 +6,18 @@ Outdoorexperten med flera), från terminalen eller från ett skript. Två ytor:
 - `e37 order`: E37 Admin, alltså orderflödesrapporten och Triton Admin REST API. Kräver API-nyckel.
 - `e37 shop`: butikens publika MCP-server med produkter, varumärken, kategorier och taggar. Ingen nyckel.
 
+## Via Claude
+
+Kollegor som inte använder terminalen kan låta Claude göra allt. Öppna Claude-appen,
+välj **Code**, och skriv:
+
+> Läs https://github.com/Wesports-Scandinavia-AB/e37-cli/blob/main/INSTALL-FOR-CLAUDE.md
+> och hjälp mig installera e37-cli och lägga till mitt E37-konto.
+
+Claude installerar, och öppnar ett fönster där du själv fyller i dina E37-uppgifter.
+Claude ser dem aldrig. Sedan kan du fråga Claude saker som "vilka ordrar kom in
+i förmiddags?".
+
 ## Installera
 
 ```
@@ -56,6 +68,8 @@ En post per E37-instans. Flera instanser, även från olika bolag, kan ligga sid
 ```
 e37 account add vartex-outdoor    frågar efter webbshop-ID, API-bas, rapport-slug,
                                   API-nyckel och webbinloggning; Enter behåller värdet
+e37 account add vartex-outdoor --dialog
+                                  samma sak i ett fönster, för den som inte vill ha terminal
 e37 account list                  instanserna, och vilka hemligheter som finns (aldrig värdena)
 e37 account remove vartex-outdoor
 ```

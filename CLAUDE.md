@@ -20,12 +20,16 @@ standardbiblioteket, argparse, entry point `e37`.
 - `src/e37/admin.py`: E37 Admin, alltså orderflödesrapporten (nyckel i query) och Triton Admin REST API (Basic: webshop-ID och nyckel). Läser bara.
 - `src/e37/shop.py`: butikens publika MCP-server (`/api/mcp`), JSON-RPC utan auth. Kräver en egen User-Agent; urllibs standard får 403.
 - `src/e37/keychain.py`: OS-nyckelringen, en post per E37-instans. Windows via ctypes/advapi32, macOS via `/usr/bin/security`.
+- `src/e37/dialog.py`: fönstret för `e37 account add --dialog` (tkinter, med osascript som reserv på macOS). Hemligheter matas in av människan, aldrig via en assistent.
 - `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
-- `docs/`: Order-API, OpenAPI-spec, MCP, webbgränssnittet (`docs/web.md`).
+- `docs/`: Order-API, MCP, webbgränssnittet (`docs/web.md`).
+- `INSTALL-FOR-CLAUDE.md`: instruktion till kollegors Claude, för installation och användning. Håll den i takt med kommandona.
+
+Repot är publikt. Interna anteckningar (korrespondens, leverantörsbedömningar, underlag från andra bolag) hör hemma i det privata `e37-notes`, inte här.
 
 Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som moduler i `src/e37/` när de behövs, inte som egna paket.
 
 ## Status (2026-10-07)
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
-- `e37 order` är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel. Nyckelskapande i E37 Admin felar och Tommy har kontakt med E37. Både `/reports/orderflow` och `/orders/{id}/status` på admin3 svarar 401 på en ogiltig nyckel, så sökvägarna stämmer.
+- `e37 order` är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel. Både `/reports/orderflow` och `/orders/{id}/status` på admin3 svarar 401 på en ogiltig nyckel, så sökvägarna stämmer.

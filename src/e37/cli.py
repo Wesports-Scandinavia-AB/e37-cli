@@ -64,7 +64,25 @@ def cmd_account_add(a):
     if not admin.NAME_RE.match(a.name):
         print("Namnet får bara innehålla a–z, 0–9 och bindestreck, t.ex. vartex-outdoor.", file=sys.stderr)
         return 2
-    if not sys.stdin.isatty():
+    if a.dialog:
+        from . import dialog
+        old = keychain.get(a.name) or {}
+        web = old.get("web") or {}
+        flat = {"webshopId": old.get("webshopId"), "baseUrl": old.get("baseUrl") or admin.DEFAULT_BASE_URL,
+                "account": old.get("account") or a.name, "key": old.get("key"),
+                "email": web.get("email"), "password": web.get("password")}
+        got = dialog.ask(a.name, flat)
+        if got is None:
+            print(f"Avbrutet. Inget sparat för {a.name}.", file=sys.stderr)
+            return 1
+        # An empty secret field means "keep what is stored", never "erase it".
+        for k in ("key", "password"):
+            got[k] = got.get(k) or flat[k]
+        entry = {"webshopId": got.get("webshopId"), "baseUrl": got.get("baseUrl"),
+                 "account": got.get("account"), "key": got.get("key")}
+        if got.get("email"):
+            entry["web"] = {"email": got["email"], "password": got.get("password")}
+    elif not sys.stdin.isatty():
         try:
             entry = json.loads(sys.stdin.read().lstrip("﻿"))
         except ValueError as e:
@@ -311,8 +329,11 @@ def main(argv=None):
     s = acs.add_parser("list", help="instances and which secrets they have (never the values)")
     _json_flag(s)
     s.set_defaults(fn=cmd_account_list)
-    s = acs.add_parser("add", help="create or update one, prompts; or pipe JSON on stdin")
+    s = acs.add_parser("add", help="create or update one: prompts, --dialog, or JSON on stdin")
     s.add_argument("name", help="your name for the instance, e.g. vartex-outdoor")
+    s.add_argument("--dialog", action="store_true",
+                   help="open a window on this screen for the values; for assistants setting this up "
+                        "for someone, so no secret passes through the chat")
     s.set_defaults(fn=cmd_account_add)
     s = acs.add_parser("remove", help="delete one from the keychain")
     s.add_argument("name")
