@@ -3,7 +3,7 @@ import json
 import sys
 from datetime import datetime
 
-from . import E37Error, admin, keychain, shop
+from . import E37Error, admin, keychain, shop, web
 
 
 def _dump(data):
@@ -117,29 +117,163 @@ def cmd_account_remove(a):
 
 # ---- order -------------------------------------------------------------------
 
-def cmd_order_flow(a):
-    acc = admin.resolve_account(a.account)
+def _window(a, default):
     if a.start or a.end:
         if not (a.start and a.end):
-            print("--from och --to anges tillsammans.", file=sys.stderr)
-            return 2
-        start, end = a.start, a.end
+            raise E37Error("--from och --to anges tillsammans.")
+        return a.start, a.end
+    return default()
+
+
+def _resolve_site(session, ref):
+    """A site id, or a name (case-insensitive, with or without E37's '(standard)')."""
+    if not ref:
+        return None
+    sites = session.sites()
+    clean = [(i, n.replace("(standard)", "").strip()) for i, n in sites]
+    for i, n in clean:
+        if ref == i or ref.lower() == n.lower():
+            return i
+    hits = [(i, n) for i, n in clean if ref.lower() in n.lower()]
+    if len(hits) == 1:
+        return hits[0][0]
+    known = ", ".join(f"{n} ({i})" for i, n in (hits or clean))
+    raise E37Error(f"{'Flera webbplatser' if hits else 'Ingen webbplats'} matchar {ref!r}: {known}")
+
+
+def _use_api(acc, a):
+    """The API when it can answer and there is a key; otherwise the web login."""
+    if getattr(a, "via", None) == "api":
+        return True
+    if getattr(a, "via", None) == "web":
+        return False
+    return bool(acc["key"]) and not getattr(a, "site", None)
+
+
+def cmd_order_flow(a):
+    acc = admin.resolve_account(a.account)
+    start, end = _window(a, admin.half_hour_window)
+    if _use_api(acc, a):
+        rows, via = admin.orderflow(acc, start, end, mode=a.mode), "api"
     else:
-        start, end = admin.half_hour_window()
-    rows = admin.orderflow(acc, start, end, mode=a.mode)
+        s = web.Session(acc)
+        rows, via = s.orderflow(start, end, mode=a.mode, site=_resolve_site(s, a.site)), "webb"
     if a.json:
         _dump(rows)
         return 0
-    print(f"{acc['name']}  {start:%Y-%m-%d %H:%M} – {end:%H:%M}  ({a.mode})  {len(rows)} ordrar\n")
+    print(f"{acc['name']}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M}  ({a.mode}, via {via})  {len(rows)} ordrar\n")
     for r in rows:
-        print(f"{r.get('order_id', '?'):>9}  {str(r.get('order_timestamp', ''))[:19]}  "
-              f"{r.get('total_sum_incl_vat', 0):>10.2f} {r.get('currency', ''):<3}  "
-              f"{r.get('site_name', '')}")
+        print(f"{r.get('order_id', '?'):>9}  {str(r.get('order_timestamp', ''))[:16]}  "
+              f"{float(r.get('total_sum_incl_vat') or 0):>10.2f} {r.get('currency', ''):<3}  "
+              f"{r.get('site_name', ''):<20} {r.get('order_status_title', '')}")
     return 0
+
+
+# ---- report -------------------------------------------------------------------
+
+def _report_type(session, ref):
+    types = session.report_types()
+    for i, title in types:
+        if ref == i:
+            return i, title
+    hits = [(i, title) for i, title in types if ref.lower() in title.lower()]
+    if len(hits) == 1:
+        return hits[0]
+    raise E37Error(f"{'Flera' if hits else 'Ingen'} rapport matchar {ref!r}. Lista med: e37 report list")
+
+
+def cmd_report_list(a):
+    s = web.Session(admin.resolve_account(a.account))
+    types = s.report_types()
+    if a.json:
+        _dump([{"id": i, "title": t} for i, t in types])
+        return 0
+    for i, title in types:
+        print(f"{i:>6}  {title}")
+    return 0
+
+
+def cmd_report_show(a):
+    s = web.Session(admin.resolve_account(a.account))
+    rid, title = _report_type(s, a.type)
+    settings = s.report_settings(rid)
+    if a.json:
+        _dump({"id": rid, "title": title, "settings": settings})
+        return 0
+    print(f"{rid}  {title}\n")
+    for st in settings:
+        print(f"  {st['id']:<28} {st['kind']:<13} {st['label']}  [standard: {st['default']}]")
+        for v, label in st["options"][:40]:
+            if v or label:
+                print(f"      {v:<10} {label}")
+        if len(st["options"]) > 40:
+            print(f"      ... {len(st['options']) - 40} till (se --json)")
+    return 0
+
+
+def cmd_report_get(a):
+    s = web.Session(admin.resolve_account(a.account))
+    rid, title = _report_type(s, a.type)
+    settings = {st["id"]: st for st in s.report_settings(rid)}
+    values = {}
+    for kv in a.set or []:
+        if "=" not in kv:
+            raise E37Error(f"--set väntar ID=VÄRDE, fick {kv!r}. Se: e37 report show {rid}")
+        k, v = kv.split("=", 1)
+        if k not in settings:
+            raise E37Error(f"Rapport {rid} har ingen inställning {k!r}. Finns: {', '.join(settings)}")
+        values[k] = v
+    if a.start or a.end:
+        start, end = _window(a, None)
+        di = next((k for k, st in settings.items() if st["kind"] == "date-interval"), None)
+        if not di:
+            raise E37Error(f"Rapport {rid} har inget datumintervall.")
+        # Each report keeps its own format: some take a time, some only a date.
+        fmt = "%Y-%m-%d %H:%M" if ":" in settings[di]["default"] else "%Y-%m-%d"
+        values[di] = f"{start.strftime(fmt)},{end.strftime(fmt)}"
+    if a.site:
+        sk = next((k for k in settings if k.lower() in ("site", "siteid")), None)
+        if not sk:
+            raise E37Error(f"Rapport {rid} kan inte filtreras på webbplats.")
+        values[sk] = _resolve_site(s, a.site)
+    data = s.report(rid, values)
+    if a.json:
+        _dump(data)
+        return 0
+    rows = data.get("rows", data) if isinstance(data, dict) else data
+    print(f"{rid}  {title}: {len(rows)} rader\n")
+    if rows:
+        cols = list(rows[0].keys())
+        print("\t".join(cols))
+        for r in rows[:a.top]:
+            print("\t".join(str(r.get(c, "")) for c in cols))
+        if len(rows) > a.top:
+            print(f"... {len(rows) - a.top} rader till (--top N eller --json)")
+    return 0
+
+
+def cmd_sites(a):
+    s = web.Session(admin.resolve_account(a.account))
+    rows = [{"id": i, "name": n.replace("(standard)", "").strip(), "default": "(standard)" in n}
+            for i, n in s.sites()]
+    if a.json:
+        _dump(rows)
+        return 0
+    for r in rows:
+        print(f"{r['id']:>4}  {r['name']}{'  (standard)' if r['default'] else ''}")
+    return 0
+
+
+def _api_only(acc):
+    if not acc["key"]:
+        raise E37Error(f"En enskild order hämtas än så länge bara via API:t, och {acc['name']} har ingen "
+                       f"API-nyckel. Via webbinloggningen finns orderflödet (e37 order flow) och rapporterna "
+                       f"(e37 report), till exempel 'Orderhändelser' och 'Orderlista för order med orderstatus'.")
 
 
 def cmd_order_show(a):
     acc = admin.resolve_account(a.account)
+    _api_only(acc)
     o = admin.order(acc, a.id)
     if o is None:
         print(f"Order {a.id} finns inte hos {acc['name']}.", file=sys.stderr)
@@ -166,6 +300,7 @@ def cmd_order_show(a):
 
 def cmd_order_status(a):
     acc = admin.resolve_account(a.account)
+    _api_only(acc)
     s = admin.order_status(acc, a.id)
     if s is None:
         print(f"Order {a.id} finns inte hos {acc['name']}.", file=sys.stderr)
@@ -361,18 +496,22 @@ def _add_order_commands(sub):
     s = _parser(sub, "flow", "orders completed in a time window (the order flow report)",
                 "Orders whose payment was confirmed inside a time window, from E37's order flow\n"
                 "report. Read-only. Without --from/--to: the previous closed half hour. Times are\n"
-                "Swedish local time. Needs an instance with an API key.\n\n"
+                "Swedish local time. Uses the API when the instance has a key, otherwise the\n"
+                "person's own E37 Admin login (which also gives the extra columns).\n\n"
                 "JSON: a list of rows with order_id, order_timestamp, total_sum_incl_vat,\n"
                 "total_sum_excl_vat, currency, country, country_name, language, person_type,\n"
-                "site_id, site_name.",
+                "site_id, site_name; via the web also order_status_title, payment_method_title,\n"
+                "shipping_fee_incl_vat, erp_import_status, external_marketplace_title and more.",
                 "examples:\n  e37 order flow --account vartex-outdoor --json\n"
-                "  e37 order flow --account vartex-outdoor --from '2026-10-07 08:00' --to '2026-10-07 12:00' --json")
+                "  e37 order flow --account vartex-outdoor --from '2026-10-07 08:00' --to '2026-10-07 12:00' --json\n"
+                "  e37 order flow --account vartex-outdoor --site 'Addnature SE' --json")
     _account_flag(s)
-    s.add_argument("--from", dest="start", type=_when, metavar="'YYYY-MM-DD HH:MM'",
-                   help="window start, local time")
-    s.add_argument("--to", dest="end", type=_when, metavar="'YYYY-MM-DD HH:MM'", help="window end, local time")
-    s.add_argument("--mode", default="completed",
-                   help="E37 orderTimestampMode (default completed: when the payment was confirmed)")
+    _window_flags(s)
+    s.add_argument("--mode", default="completed", choices=("completed", "created"),
+                   help="completed (default): when the payment was confirmed; created: when checkout began")
+    s.add_argument("--site", metavar="ID|NAME", help="only one site, e.g. 'Addnature SE' or 20 (web login only)")
+    s.add_argument("--via", choices=("api", "web"),
+                   help="force a route; default is the API when the instance has a key, else the web login")
     _json_flag(s)
     s.set_defaults(fn=cmd_order_flow)
 
@@ -444,6 +583,50 @@ def _add_shop_commands(sub):
         s.set_defaults(fn=_cmd_shop_list(tool))
 
 
+def _window_flags(s):
+    s.add_argument("--from", dest="start", type=_when, metavar="'YYYY-MM-DD HH:MM'",
+                   help="window start, local time")
+    s.add_argument("--to", dest="end", type=_when, metavar="'YYYY-MM-DD HH:MM'", help="window end, local time")
+
+
+def _add_report_commands(sub):
+    s = _parser(sub, "list", "the reports E37 Admin offers this login",
+                "Every report type in E37 Admin's report page (sales per article or brand, VAT,\n"
+                "order events, refunds, stock per brand, gift cards, campaign planning, ...).\n"
+                "Needs the instance's web login.",
+                "example:\n  e37 report list --account vartex-outdoor --json")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_report_list)
+
+    s = _parser(sub, "show", "the settings one report takes, with their allowed values",
+                "The settings of one report: id, kind (date-interval, select, checkbox, radio,\n"
+                "text), label, default and allowed values. Use the ids with `report get --set`.",
+                "example:\n  e37 report show 21 --account vartex-outdoor --json\n"
+                "  e37 report show varumärken --account vartex-outdoor")
+    s.add_argument("type", help="report id or part of its title")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_report_show)
+
+    s = _parser(sub, "get", "run one report and get its rows",
+                "Run one report as JSON through the person's E37 Admin login. Read-only.\n"
+                "--from/--to fill the report's date interval in the format it uses; --site its\n"
+                "site filter; anything else with --set ID=VALUE (ids from `report show`).\n"
+                "Settings not given keep E37's defaults; checkboxes default to off.\n\n"
+                "JSON: {\"rows\": [...], \"columns\": [...]} as E37 delivers it.",
+                "examples:\n  e37 report get 21 --account vartex-outdoor --from '2026-10-01 00:00' --to '2026-10-07 23:59' --json\n"
+                "  e37 report get 7 --account vartex-outdoor --site 'Addnature SE' --set personType=1 --json")
+    s.add_argument("type", help="report id or part of its title")
+    _account_flag(s)
+    _window_flags(s)
+    s.add_argument("--site", metavar="ID|NAME", help="only one site")
+    s.add_argument("--set", action="append", metavar="ID=VALUE", help="any other setting, repeatable")
+    s.add_argument("--top", type=int, default=20, metavar="N", help="rows shown without --json (default 20)")
+    _json_flag(s)
+    s.set_defaults(fn=cmd_report_get)
+
+
 def _add_skill_commands(sub):
     s = _parser(sub, "install", "install the Claude skill that teaches Claude to use e37",
                 "Write SKILL.md to ~/.claude/skills/e37/, where Claude Code (and Code in the\n"
@@ -467,7 +650,9 @@ def main(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Read orders and products out of the E37 webshop platform. Nothing here writes to E37.\n\n"
                     "  shop     products in a shop, no login needed\n"
-                    "  order    orders, needs an E37 instance with an API key\n"
+                    "  order    orders: the API with a key, otherwise your own E37 Admin login\n"
+                    "  report   any E37 Admin report as JSON, via your own login\n"
+                    "  sites    the shops your login can see\n"
                     "  account  your E37 instances, stored in the OS keychain\n"
                     "  skill    teach Claude how to use this tool\n"
                     "  update   get the latest version from GitHub",
@@ -476,13 +661,22 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
 
     o = _parser(sub, "order", "orders from E37 Admin: flow, show, status (read-only)")
     _add_order_commands(o.add_subparsers(dest="order_cmd", required=True))
+
+    r = _parser(sub, "report", "any E37 Admin report as JSON: list, show, get (web login)")
+    _add_report_commands(r.add_subparsers(dest="report_cmd", required=True))
+
+    s = _parser(sub, "sites", "the sites (shops) an instance's web login can see",
+                epilog="example:\n  e37 sites --account vartex-outdoor --json")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_sites)
 
     ac = _parser(sub, "account", "your E37 instances in the OS keychain: list, add, remove")
     _add_account_commands(ac.add_subparsers(dest="account_cmd", required=True))

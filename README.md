@@ -1,10 +1,12 @@
 # e37
 
-Ordrar och produkter ur webbshopsplattformen E37 (Cykloteket, Bikester, Addnature,
-Outdoorexperten med flera), från terminalen eller från ett skript. Två ytor:
+Ordrar, rapporter och produkter ur webbshopsplattformen E37 (Cykloteket, Bikester,
+Addnature, Outdoorexperten med flera), från terminalen, från ett skript eller via Claude.
 
-- `e37 order`: E37 Admin, alltså orderflödesrapporten och Triton Admin REST API. Kräver API-nyckel.
-- `e37 shop`: butikens publika MCP-server med produkter, varumärken, kategorier och taggar. Ingen nyckel.
+- `e37 order` och `e37 report`: E37 Admin med din egen inloggning. Orderflödet och alla
+  rapporter (försäljning per artikel och varumärke, moms, lager, ...) som JSON. API-nyckel
+  behövs bara för en enskild order.
+- `e37 shop`: butikens publika produktsök. Ingen inloggning.
 
 ## Via Claude
 
@@ -47,8 +49,14 @@ e37 account list         dina E37-instanser (aldrig nycklarna), add/remove
 
 e37 order flow           orderflödesrapporten, föregående stängda halvtimme
 e37 order flow --from '2026-10-07 08:00' --to '2026-10-07 09:00'
-e37 order show ID        en order i sin helhet: kund, betalning, leverans, rader
-e37 order status ID      en orders aktuella status
+e37 order flow --site 'Addnature SE'   bara en webbplats
+e37 order show ID        en order i sin helhet (kräver API-nyckel)
+e37 order status ID      en orders aktuella status (kräver API-nyckel)
+
+e37 sites                webbplatserna din inloggning ser
+e37 report list          rapporterna i E37 Admin
+e37 report show 21       en rapports inställningar och tillåtna värden
+e37 report get 21 --from '2026-10-01 00:00' --to '2026-10-07 23:59' --site 'Addnature SE'
 
 e37 shop search ORD      produktsök, --top, --brand, --sort, --in-stock, --campaign
 e37 shop product NR      en produktmodell via modellnummer (--gtin för variant), --specs
@@ -89,8 +97,9 @@ skript går det att pipa in posten som JSON:
  "key": "…", "web": {"email": "…", "password": "…"}}
 ```
 
-Allt utom namnet är valfritt. Rapporten behöver `key`, REST-API:t även `webshopId`,
-och webbgränssnittet `web`. `account` är E37:s slug för rapporten och är som
+Allt utom namnet är valfritt. Webbinloggningen (`webshopId` och `web`) räcker för
+orderflödet, rapporterna och webbplatserna. `key` behövs bara för en enskild order
+via REST-API:t, och används för orderflödet när den finns. `account` är E37:s slug för rapporten och är som
 standard samma som namnet.
 
 För CI eller ett engångsskript går miljövariabler före nyckelringen: `E37_ACCOUNT`,

@@ -1,9 +1,9 @@
 ---
 name: e37
-description: Läs ordrar och produkter ur webbshopsplattformen E37 med e37-cli. Använd när användaren frågar om ordrar, orderflöde, en orders status, eller om produkter, priser, lagerstatus och varumärken i en E37-butik (t.ex. Addnature, Outdoorexperten, Cykloteket, Bikester, Rull), eller vill lägga till eller ändra sitt E37-konto. Exempel "vilka ordrar kom in i förmiddags", "vad har order 1189437 för status", "har Addnature regnjackor från Patagonia i lager", "lägg till mitt E37-konto".
+description: Läs ordrar, rapporter och produkter ur webbshopsplattformen E37 med e37-cli. Använd när användaren frågar om ordrar, orderflöde, försäljning per artikel eller varumärke, moms, återbetalningar, lager, presentkort, en orders status, eller om produkter, priser, lagerstatus och varumärken i en E37-butik (t.ex. Addnature, Outdoorexperten, Cykloteket, Bikester, Rull), eller vill lägga till eller ändra sitt E37-konto. Exempel "vilka ordrar kom in i förmiddags", "vilka varumärken sålde mest på Addnature i veckan", "vad har order 1189437 för status", "har Addnature regnjackor från Patagonia i lager", "lägg till mitt E37-konto".
 ---
 
-# e37: ordrar och produkter ur E37
+# e37: ordrar, rapporter och produkter ur E37
 
 `e37` är installerat på den här datorn. Kör det som `python -m e37` (`python3 -m e37`
 på macOS). Det fungerar även när `e37` inte finns i PATH. Läs `python -m e37 KOMMANDO
@@ -33,7 +33,7 @@ python -m e37 account list --json
 
 ger namn, webbshop-ID, server, om API-nyckel finns (`apiKey`) och e-post för
 webbinloggningen (`webEmail`). Finns flera konton måste du ange `--account NAMN`
-på orderkommandona. Gissa aldrig, fråga vilken butik eller instans som avses.
+på `order`, `report` och `sites`. Gissa aldrig, fråga vilken butik eller instans som avses.
 Det här är den enda källan till vilka konton som finns.
 
 ## Produkter (ingen inloggning)
@@ -57,25 +57,77 @@ python -m e37 shop brands|categories|tags --json
   material, målgrupp och vikt.
 - Standardbutik är Addnature. Fråga om butiken om det inte framgår.
 
-## Ordrar (kräver konto med API-nyckel)
+## Två vägar in: API-nyckel eller personens egen inloggning
+
+Ett konto kan ha en API-nyckel, en webbinloggning (e-post och lösenord till E37
+Admin), eller båda. `account list --json` visar vilket (`apiKey`, `webEmail`).
+
+- **Webbinloggningen** ser allt personen ser i E37 Admin: orderflödet med extra
+  kolumner och alla rapporter. De flesta har bara den, och det räcker.
+- **API-nyckeln** behövs bara för en enskild order (`order show`, `order status`).
+
+`e37` väljer själv: API:t när kontot har en nyckel och frågan går att besvara
+där, annars webben. Varje körning loggar in på nytt. Ett anrop via webben tar
+några sekunder, så slå ihop frågor när det går.
+
+## Webbplatser
+
+En instans har ofta flera webbplatser (butiker per land). Lista dem:
+
+```
+python -m e37 sites --account NAMN --json
+```
+
+`--site` på `order flow` och `report get` tar id eller namn (`20`, `'Addnature SE'`).
+Ett namn som passar flera webbplatser ger fel med alternativen. Fråga då.
+
+## Ordrar
 
 Läser bara. Ändrar ingenting i E37.
 
 ```
 python -m e37 order flow --account NAMN --json
-python -m e37 order flow --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --to 'ÅÅÅÅ-MM-DD TT:MM' --json
-python -m e37 order show ORDERNUMMER --account NAMN --json
-python -m e37 order status ORDERNUMMER --account NAMN --json
+python -m e37 order flow --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --to 'ÅÅÅÅ-MM-DD TT:MM' [--site 'Addnature SE'] --json
+python -m e37 order show ORDERNUMMER --account NAMN --json      (kräver API-nyckel)
+python -m e37 order status ORDERNUMMER --account NAMN --json    (kräver API-nyckel)
 ```
 
-- `order flow` utan tider ger föregående stängda halvtimme. Med tider räknas
-  svensk lokal tid. Ordrar räknas på när betalningen bekräftades, inte när de skapades.
-- Varje rad i `order flow` har `order_id`, `order_timestamp`, `total_sum_incl_vat`,
-  `total_sum_excl_vat`, `currency`, `country`, `site_name`. Summera och gruppera själv.
-- `order show` ger kund, adresser, betalning, leverans och orderrader. Det är
-  personuppgifter. Visa bara det som frågan gäller.
-- Orderdelen är byggd efter E37:s dokumentation och har ännu inte körts mot en
-  riktig nyckel. Ser svaret annorlunda ut än beskrivet, säg det och visa vad du fick.
+- `order flow` utan tider ger föregående stängda halvtimme, i svensk lokal tid.
+  Standard är att ordrar räknas på när betalningen bekräftades (`--mode completed`).
+  `--mode created` räknar på när kassan påbörjades, som i E37:s orderöversikt.
+- Varje rad har `order_id`, `order_timestamp`, `total_sum_incl_vat`, `total_sum_excl_vat`,
+  `currency`, `country`, `site_id`, `site_name`. Via webben dessutom `order_status_title`,
+  `payment_method_title`, `shipping_fee_incl_vat`, `erp_import_status` (synk till Garp)
+  och `external_marketplace_title`. Summera och gruppera själv.
+- `order show` ger kund, adresser, betalning och orderrader. Det är personuppgifter.
+  Visa bara det som frågan gäller.
+- Saknar kontot API-nyckel och frågan gäller en enskild order: använd `order flow`
+  över rätt tid, eller rapporterna "Orderhändelser" och "Orderlista för order med
+  orderstatus".
+
+## Rapporter (personens inloggning)
+
+Alla rapporter i E37 Admin, som JSON. Bland annat försäljning per artikel (7)
+och per varumärke (21), moms (5), orderhändelser (6), återbetalningar (14),
+artikelvarianter med priser och statistik (15), lager per varumärke (4),
+presentkort (16–18) och kampanjplanering (23). Id:n kan skilja mellan instanser.
+Lita på `report list`.
+
+```
+python -m e37 report list --account NAMN --json
+python -m e37 report show RAPPORT --account NAMN --json
+python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --to 'ÅÅÅÅ-MM-DD TT:MM'
+                        [--site NAMN] [--set ID=VÄRDE ...] --json
+```
+
+- `RAPPORT` är id eller en del av titeln (`varumärken`).
+- Kör alltid `report show` först för en rapport du inte använt. Där syns vilka
+  inställningar den har, vilka värden som är tillåtna och vad som är standard.
+- `--from/--to` fyller rapportens datumintervall i det format den vill ha (vissa
+  tar bara datum). Allt annat sätts med `--set ID=VÄRDE`. Kryssrutor är av som
+  standard, slå på med `--set ID=true`.
+- Svaret är `{"rows": [...], "columns": [...]}`.
+- Långa perioder och "alla webbplatser" kan bli stora. Börja med en kort period.
 
 ## Lägga till eller ändra ett konto
 
@@ -96,8 +148,8 @@ I fönstret finns:
 | Webbshop-ID | Det personen skriver i "Webbshop-ID" när hen loggar in i E37 Admin |
 | API-adress | Standard `https://admin3.e37.se/api`; vissa butiker ligger på `admin2` |
 | Rapport-konto | Butikens kontonamn i E37:s rapporter, oftast samma som namnet |
-| API-nyckel | Skapas i E37 Admin. Behövs för orderkommandona |
-| E-post, lösenord | Inloggningen i E37 Admin. Används inte av något kommando än |
+| API-nyckel | Valfri. Behövs bara för en enskild order (`order show`, `order status`) |
+| E-post, lösenord | Inloggningen i E37 Admin. Räcker för orderflödet, rapporterna och webbplatserna |
 
 ## Fel och vad du gör
 
@@ -105,7 +157,9 @@ I fönstret finns:
 |---|---|
 | `Inga E37-konton` | Lägg till ett med `account add NAMN --dialog`. |
 | `E37 avvisade nyckeln … (401)` | Nyckeln är fel eller indragen. Öppna fönstret för samma namn så kan en ny klistras in. |
-| `saknar API-nyckel` | Samma åtgärd. |
+| `saknar API-nyckel` / `bara via API:t` | Gäller en enskild order. Använd `order flow` eller en rapport i stället. |
+| `saknar webbinloggning` | Öppna fönstret för kontot så att e-post och lösenord kan fyllas i. |
+| `Inloggningen i E37 Admin misslyckades` | Fel webbshop-ID, e-post eller lösenord. Öppna fönstret igen. |
 | `Flera E37-konton, välj ett med --account` | Fråga vilken instans. |
 | `Det går inte att visa en dialog här` | tkinter saknas. Installera om Python från python.org (Windows). |
 | `No module named e37` | Inte installerat för den här Python-versionen. Följ https://github.com/Wesports-Scandinavia-AB/e37-cli/blob/main/INSTALL-FOR-CLAUDE.md |

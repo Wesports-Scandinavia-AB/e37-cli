@@ -7,7 +7,8 @@ standardbiblioteket, argparse, entry point `e37`.
 ## Regler
 
 - Inga tredjepartsberoenden i kärnan. `urllib` och `json` räcker för Admin-API:t och MCP:n, som båda svarar JSON. Samma beslut som i wsg-cli.
-- Undantag: modulen mot E37 Admin-webben (ASP.NET WebForms) använder Scrapling, som det valfria tillägget `e37-cli[web]`. Importera det inne i den modulen, aldrig från `cli.py` på toppnivå, så att `e37 shop` och `e37 order` fungerar utan det. Beslut 2026-10-07.
+- Undantag: behöver en webbsida en riktig webbläsare används Scrapling, som det valfria tillägget `e37-cli[web]`, importerat i den funktion som behöver det. Hittills (2026-10-07) har allt i `web.py` gått med `urllib`.
+- Vägval: API:t bara för det API:t kan svara på och bara när kontot har nyckel. Annars personens webbinloggning. E37:s API har nästan ingenting; webben är huvudvägen.
 - Inga hemligheter i repot eller i filer. E37-inloggningar är personliga och ligger i användarens nyckelring via `src/e37/keychain.py`: Credential Manager på Windows, nyckelringen på macOS. Inte i Arena-valvet, som är för bolagets maskinhemligheter. Miljövariabler `E37_*` går före, för CI.
 - Ett hemligt värde passerar aldrig argv. Det läses med `getpass` eller från stdin. På macOS skrivs det via `security -i` och stdin, hex-kodat.
 - Flera E37-instanser används samtidigt (olika webbshop-ID, olika bolag). Ingen global state och ingen standardinstans. Allt går via ett konto från `admin.resolve_account` (en nyckelringspost per instans), och webbsessioner delas aldrig mellan körningar. Se "Flera instanser samtidigt" i `docs/web.md`.
@@ -19,6 +20,7 @@ standardbiblioteket, argparse, entry point `e37`.
 
 - `src/e37/admin.py`: E37 Admin, alltså orderflödesrapporten (nyckel i query) och Triton Admin REST API (Basic: webshop-ID och nyckel). Läser bara.
 - `src/e37/shop.py`: butikens publika MCP-server (`/api/mcp`), JSON-RPC utan auth. Kräver en egen User-Agent; urllibs standard får 403.
+- `src/e37/web.py`: E37 Admin med personens egen inloggning: login, webbplatser, rapporter via `/custom/orderReportHandler.ashx`. Bara standardbiblioteket; inget har behövt en webbläsare än. Läser bara.
 - `src/e37/keychain.py`: OS-nyckelringen, en post per E37-instans. Windows via ctypes/advapi32, macOS via `/usr/bin/security`.
 - `src/e37/dialog.py`: fönstret för `e37 account add --dialog` (tkinter, med osascript som reserv på macOS). Hemligheter matas in av människan, aldrig via en assistent.
 - `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
@@ -35,4 +37,6 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 ## Status (2026-10-07)
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
-- `e37 order` är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel. Både `/reports/orderflow` och `/orders/{id}/status` på admin3 svarar 401 på en ogiltig nyckel, så sökvägarna stämmer.
+- Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow` och `report list/show/get`.
+- Via API:t: `order show/status` är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
+- Inte byggt: en enskild order via webben. Orderrutan öppnas med en postback, `viewOrder?<id>` mot `orders.aspx`, och måste tolkas från HTML. Se `docs/web.md`.

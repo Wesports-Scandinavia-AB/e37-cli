@@ -1,8 +1,25 @@
 # E37:s webbgränssnitt
 
-Karta över E37 Admin (`https://admin3.e37.se/`) som webbgränssnitt, och hur vi bygger mot det. Underlag för en modul `src/e37/web.py` som gör det API:et inte kan. Modulen finns inte än.
+Karta över E37 Admin (`https://admin3.e37.se/`) som webbgränssnitt, och hur `src/e37/web.py` läser det med personens egen inloggning.
 
 Selektorer och flöden är kartlagda 2026-10-06 med Playwright mot en riktig instans med fyra webbplatser. Ingenting här är verifierat med `e37-cli` än. Markera det som **[verifierat ÅÅÅÅ-MM-DD]** när vi själva har sett det.
+
+## Verifierat 2026-10-07 (det `src/e37/web.py` bygger på)
+
+Kört med `urllib` och en cookie-jar, utan webbläsare, mot en riktig instans med 21 webbplatser.
+
+| Vad | Hur |
+|---|---|
+| Inloggning | GET `/` skickar till `login.aspx?ReturnUrl=%2f`. POST samma adress med de dolda `__VIEWSTATE`-fälten, `tbAccountName` (webbshop-ID), `tbEmail`, `tbPassword` och `btnLogin.x`/`btnLogin.y` (bildknapp). Lyckad om svaret innehåller `ddlSitePicker`. Cookies: `.E37ADMINSESSION`, `.E37ADMINAUTH`, `TritonAdminLogin`. |
+| Webbplatser | Options i `ctl00$ddlSitePicker` på startsidan. Standardbutiken har `(standard)` i namnet. |
+| Rapporttyper | Options i `ctl00$cph1$ddlReportType` på `workspace/workwith/reports.aspx`. 28 typer. |
+| Rapportens inställningar | Postback med `__EVENTTARGET=ctl00$cph1$ddlReportType` och vald typ. Inställningarna ritas som `<div data-setting-id=… data-setting-type=…>` med input, select, radio eller checkbox i. |
+| Ladda ner en rapport | GET `/custom/orderReportHandler.ashx?data=…&reportType=ID&fileType=5`. `data` är `id:värde` per inställning, åtskilda med `¤`. Kryssrutor `true`/`false`, datumintervall `från,till` i rapportens format. `fileType` 5 är JSON (1 tabb, 2 semikolon, 3 Excel). Svaret är `{"rows": […], "columns": […]}` med `Content-Disposition: attachment`. |
+| Ordersidan | `workspace/workwith/orders.aspx` listar ordrar från alla webbplatser i `#ctl00_cph1_tblOrders`. Filter för datum, betalstatus, orderstatus, kundnummer och fritext. Kryssrutorna heter `checkbox|ORDERID|SITEID|1`. |
+| En order | `ViewOrder(id)` är en postback `__EVENTTARGET=__Page`, `__EVENTARGUMENT=viewOrder?ID` mot `orders.aspx`. En vanlig synkron postback räcker, och orderrutan (`ModalPopup1`, flikar, `cartTable`, `orderSummary`) ritas i sidan. **Tolkas inte än.** |
+| Andra handlers | `/custom/print.ashx?printType=1|2|3&orderid=` (följesedel, kvitto, returnota), `/custom/exportListHandler.ashx`, `/custom/exporthandler.ashx`. Inte undersökta. |
+
+Kartan nedan, med artikelregistret och variantdialogen, är från en tidigare kartläggning med Playwright och inte verifierad med `web.py`.
 
 ## Grunder
 
