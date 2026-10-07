@@ -4,8 +4,8 @@ Ordrar, rapporter och produkter ur webbshopsplattformen E37 (Cykloteket, Bikeste
 Addnature, Outdoorexperten med flera), från terminalen, från ett skript eller via Claude.
 
 - `e37 order` och `e37 report`: E37 Admin med din egen inloggning. Orderflödet och alla
-  rapporter (försäljning per artikel och varumärke, moms, lager, ...) som JSON. API-nyckel
-  behövs bara för en enskild order.
+  rapporter (försäljning per artikel och varumärke, moms, lager, ...) som JSON. Ingen
+  API-nyckel behövs; finns en används den där E37:s API kan svara.
 - `e37 shop`: butikens publika produktsök. Ingen inloggning.
 
 ## Via Claude
@@ -50,8 +50,8 @@ e37 account list         dina E37-instanser (aldrig nycklarna), add/remove
 e37 order flow           orderflödesrapporten, föregående stängda halvtimme
 e37 order flow --from '2026-10-07 08:00' --to '2026-10-07 09:00'
 e37 order flow --site 'Addnature SE'   bara en webbplats
-e37 order show ID        en order i sin helhet (kräver API-nyckel)
-e37 order status ID      en orders aktuella status (kräver API-nyckel)
+e37 order show ID        en order i sin helhet: kund, betalning, leverans, rader
+e37 order status ID      orderstatus, betalstatus och Garp-synk
 
 e37 sites                webbplatserna din inloggning ser
 e37 report list          rapporterna i E37 Admin
@@ -98,8 +98,7 @@ skript går det att pipa in posten som JSON:
 ```
 
 Allt utom namnet är valfritt. Webbinloggningen (`webshopId` och `web`) räcker för
-orderflödet, rapporterna och webbplatserna. `key` behövs bara för en enskild order
-via REST-API:t, och används för orderflödet när den finns. `account` är E37:s slug för rapporten och är som
+allt. `key` är valfri och används där E37:s REST-API kan svara. `account` är E37:s slug för rapporten och är som
 standard samma som namnet.
 
 För CI eller ett engångsskript går miljövariabler före nyckelringen: `E37_ACCOUNT`,

@@ -37,6 +37,6 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 ## Status (2026-10-07)
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
-- Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow` och `report list/show/get`.
-- Via API:t: `order show/status` är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
-- Inte byggt: en enskild order via webben. Orderrutan öppnas med en postback, `viewOrder?<id>` mot `orders.aspx`, och måste tolkas från HTML. Se `docs/web.md`.
+- Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow`, `order show/status` (orderrutan tolkad från HTML) och `report list/show/get`.
+- Via API:t: allt är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
+- Orderrutan har knappar som ändrar ordern (aktivera, makulera, byt leveranssätt, skicka bekräftelse, orderstatus). `web.py` skickar bara postbacken som öppnar rutan. Lägg aldrig till något som postar de knapparna utan ett eget kommando med `--dry-run`.

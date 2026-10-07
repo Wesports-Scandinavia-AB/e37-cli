@@ -63,8 +63,8 @@ Ett konto kan ha en API-nyckel, en webbinloggning (e-post och lösenord till E37
 Admin), eller båda. `account list --json` visar vilket (`apiKey`, `webEmail`).
 
 - **Webbinloggningen** ser allt personen ser i E37 Admin: orderflödet med extra
-  kolumner och alla rapporter. De flesta har bara den, och det räcker.
-- **API-nyckeln** behövs bara för en enskild order (`order show`, `order status`).
+  kolumner, enskilda ordrar och alla rapporter. De flesta har bara den, och det räcker.
+- **API-nyckeln** behövs inte för något. Finns den används den där API:t kan svara.
 
 `e37` väljer själv: API:t när kontot har en nyckel och frågan går att besvara
 där, annars webben. Varje körning loggar in på nytt. Ett anrop via webben tar
@@ -88,8 +88,8 @@ Läser bara. Ändrar ingenting i E37.
 ```
 python -m e37 order flow --account NAMN --json
 python -m e37 order flow --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --to 'ÅÅÅÅ-MM-DD TT:MM' [--site 'Addnature SE'] --json
-python -m e37 order show ORDERNUMMER --account NAMN --json      (kräver API-nyckel)
-python -m e37 order status ORDERNUMMER --account NAMN --json    (kräver API-nyckel)
+python -m e37 order show ORDERNUMMER --account NAMN --json
+python -m e37 order status ORDERNUMMER --account NAMN --json
 ```
 
 - `order flow` utan tider ger föregående stängda halvtimme, i svensk lokal tid.
@@ -99,11 +99,15 @@ python -m e37 order status ORDERNUMMER --account NAMN --json    (kräver API-nyc
   `currency`, `country`, `site_id`, `site_name`. Via webben dessutom `order_status_title`,
   `payment_method_title`, `shipping_fee_incl_vat`, `erp_import_status` (synk till Garp)
   och `external_marketplace_title`. Summera och gruppera själv.
-- `order show` ger kund, adresser, betalning och orderrader. Det är personuppgifter.
-  Visa bara det som frågan gäller.
-- Saknar kontot API-nyckel och frågan gäller en enskild order: använd `order flow`
-  över rätt tid, eller rapporterna "Orderhändelser" och "Orderlista för order med
-  orderstatus".
+- `order show` ger kund, adresser, kontaktuppgifter, betalning, leverans, orderrader
+  och summering. Det är personuppgifter. Visa bara det som frågan gäller.
+  Via webben (utan nyckel) är JSON: `order_id`, `order_timestamp`, `order_status`,
+  `site`, `customer_number`, `customer_type`, `payment{method,status,invoice_number}`,
+  `delivery{method,pickup_point}`, `other` (t.ex. "Synkad till Garp (Spobik)"),
+  `addresses`, `contact`, `rows[{sku,name,quantity,unit_price,sum}]`,
+  `summary{"Totalt inkl. moms": …, "Moms": …}`, `notes`. Via API:t är formen E37:s egen.
+- `order status` ger orderstatus (Mottagen/ny, Levererad, Annullerad …),
+  betalstatus och Garp-synk.
 
 ## Rapporter (personens inloggning)
 
@@ -148,8 +152,8 @@ I fönstret finns:
 | Webbshop-ID | Det personen skriver i "Webbshop-ID" när hen loggar in i E37 Admin |
 | API-adress | Standard `https://admin3.e37.se/api`; vissa butiker ligger på `admin2` |
 | Rapport-konto | Butikens kontonamn i E37:s rapporter, oftast samma som namnet |
-| API-nyckel | Valfri. Behövs bara för en enskild order (`order show`, `order status`) |
-| E-post, lösenord | Inloggningen i E37 Admin. Räcker för orderflödet, rapporterna och webbplatserna |
+| API-nyckel | Valfri. Används där E37:s API kan svara; allt fungerar utan |
+| E-post, lösenord | Inloggningen i E37 Admin. Räcker för allt: ordrar, rapporter, webbplatser |
 
 ## Fel och vad du gör
 
@@ -157,7 +161,8 @@ I fönstret finns:
 |---|---|
 | `Inga E37-konton` | Lägg till ett med `account add NAMN --dialog`. |
 | `E37 avvisade nyckeln … (401)` | Nyckeln är fel eller indragen. Öppna fönstret för samma namn så kan en ny klistras in. |
-| `saknar API-nyckel` / `bara via API:t` | Gäller en enskild order. Använd `order flow` eller en rapport i stället. |
+| `saknar API-nyckel` | Bara med `--via api`. Ta bort `--via` så används webbinloggningen. |
+| `finns inte hos … eller syns inte` | Fel ordernummer, eller fel instans. Prova ett annat `--account`. |
 | `saknar webbinloggning` | Öppna fönstret för kontot så att e-post och lösenord kan fyllas i. |
 | `Inloggningen i E37 Admin misslyckades` | Fel webbshop-ID, e-post eller lösenord. Öppna fönstret igen. |
 | `Flera E37-konton, välj ett med --account` | Fråga vilken instans. |

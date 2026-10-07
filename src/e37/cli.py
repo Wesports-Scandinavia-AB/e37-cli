@@ -264,52 +264,79 @@ def cmd_sites(a):
     return 0
 
 
-def _api_only(acc):
-    if not acc["key"]:
-        raise E37Error(f"En enskild order hämtas än så länge bara via API:t, och {acc['name']} har ingen "
-                       f"API-nyckel. Via webbinloggningen finns orderflödet (e37 order flow) och rapporterna "
-                       f"(e37 report), till exempel 'Orderhändelser' och 'Orderlista för order med orderstatus'.")
+def _web_order(acc, order_id):
+    o = web.Session(acc).order(order_id)
+    if o is None:
+        raise E37Error(f"Order {order_id} finns inte hos {acc['name']}, eller syns inte för den här inloggningen.")
+    return o
 
 
 def cmd_order_show(a):
     acc = admin.resolve_account(a.account)
-    _api_only(acc)
-    o = admin.order(acc, a.id)
-    if o is None:
-        print(f"Order {a.id} finns inte hos {acc['name']}.", file=sys.stderr)
-        return 1
+    if _use_api(acc, a):
+        o = admin.order(acc, a.id)
+        if o is None:
+            print(f"Order {a.id} finns inte hos {acc['name']}.", file=sys.stderr)
+            return 1
+        if a.json:
+            _dump(o)
+            return 0
+        c = o.get("customer") or {}
+        print(f"Order {o.get('id')}  {str(o.get('timestamp', ''))[:19]}  {(o.get('site') or {}).get('name', '')}  (via api)")
+        print(f"Status:    {(o.get('orderStatus') or {}).get('name', '?')}")
+        print(f"ERP:       {o.get('erpOrderNumber') or ('synkad' if o.get('synced') else 'ej synkad')}")
+        print(f"Kund:      {c.get('customerNumber', '')}")
+        print(f"Betalning: {(o.get('payment') or {}).get('paymentMethod', '')}")
+        print(f"Leverans:  {(o.get('delivery') or {}).get('deliveryMethod', '')}")
+        print(f"Summa:     {o.get('totalSumInclVat')} {str(o.get('currencyCode', '')).upper()} inkl moms\n")
+        for r in o.get("rows") or []:
+            # The spec's schema and example disagree on these names; take either.
+            name = r.get("name") or r.get("title") or ""
+            variant = r.get("variant") or r.get("matrices") or ""
+            print(f"  {r.get('quantity', ''):>3} × {r.get('sku', ''):<14} {name} {variant}".rstrip()
+                  + f"  {r.get('sumInclVat', '')}")
+        return 0
+    o = _web_order(acc, a.id)
     if a.json:
         _dump(o)
         return 0
-    c = o.get("customer") or {}
-    print(f"Order {o.get('id')}  {str(o.get('timestamp', ''))[:19]}  {(o.get('site') or {}).get('name', '')}")
-    print(f"Status:   {(o.get('orderStatus') or {}).get('name', '?')}")
-    print(f"ERP:      {o.get('erpOrderNumber') or ('synkad' if o.get('synced') else 'ej synkad')}")
-    print(f"Kund:     {c.get('customerNumber', '')} {c.get('email', '')}")
-    print(f"Betalning: {(o.get('payment') or {}).get('paymentMethod', '')}")
-    print(f"Leverans: {(o.get('delivery') or {}).get('deliveryMethod', '')}")
-    print(f"Summa:    {o.get('totalSumInclVat')} {str(o.get('currencyCode', '')).upper()} inkl moms\n")
-    for r in o.get("rows") or []:
-        # The spec's schema and example disagree on these names; take either.
-        name = r.get("name") or r.get("title") or ""
-        variant = r.get("variant") or r.get("matrices") or ""
-        print(f"  {r.get('quantity', ''):>3} × {r.get('sku', ''):<14} {name} {variant}".rstrip()
-              + f"  {r.get('sumInclVat', '')}")
+    s = o["summary"]
+    print(f"Order {o['order_id']}  {o['order_timestamp']}  {o['site'] or ''}  (via webb)")
+    print(f"Orderstatus: {o['order_status']}")
+    for k, v in o["other"].items():
+        print(f"{k}: {v}")
+    print(f"Kund:        {o['customer_number'] or ''} ({o['customer_type'] or ''})")
+    print(f"Betalning:   {o['payment']['method'] or ''}  {o['payment']['status'] or ''}")
+    print(f"Leverans:    {o['delivery']['method'] or ''}")
+    print(f"Summa:       {s.get('Totalt inkl. moms')} inkl moms, {s.get('Moms')} moms\n")
+    for r in o["rows"]:
+        q = r["quantity"]
+        q = int(q) if q is not None and q == int(q) else q
+        print(f"  {q if q is not None else '':>3} × {r['sku']:<16} {r['name']}  {r['price_text']}")
     return 0
 
 
 def cmd_order_status(a):
     acc = admin.resolve_account(a.account)
-    _api_only(acc)
-    s = admin.order_status(acc, a.id)
-    if s is None:
-        print(f"Order {a.id} finns inte hos {acc['name']}.", file=sys.stderr)
-        return 1
-    if a.json:
-        _dump(s)
+    if _use_api(acc, a):
+        s = admin.order_status(acc, a.id)
+        if s is None:
+            print(f"Order {a.id} finns inte hos {acc['name']}.", file=sys.stderr)
+            return 1
+        if a.json:
+            _dump(s)
+            return 0
+        st = s.get("OrderStatus") or {}
+        print(f"Order {a.id}: {st.get('Name') or admin.ORDER_STATUS.get(st.get('ID'), '?')} ({st.get('ID')})")
         return 0
-    st = s.get("OrderStatus") or {}
-    print(f"Order {a.id}: {st.get('Name') or admin.ORDER_STATUS.get(st.get('ID'), '?')} ({st.get('ID')})")
+    o = _web_order(acc, a.id)
+    out = {"order_id": o["order_id"], "order_status": o["order_status"], "payment_status": o["payment"]["status"],
+           "site": o["site"], "order_timestamp": o["order_timestamp"], "other": o["other"]}
+    if a.json:
+        _dump(out)
+        return 0
+    extra = "  ".join(f"{k}: {v}" for k, v in o["other"].items())
+    print(f"Order {a.id}: {o['order_status']}  betalning {o['payment']['status'] or '?'}  {extra}")
     return 0
 
 
@@ -516,20 +543,28 @@ def _add_order_commands(sub):
     s.set_defaults(fn=cmd_order_flow)
 
     s = _parser(sub, "show", "one order in full: customer, addresses, payment, delivery, rows",
-                "One order from the Triton Admin REST API. Read-only. Contains personal data\n"
-                "(name, e-mail, addresses): show only what the question needs. Needs an instance\n"
-                "with webshop ID and API key.",
+                "One order. Read-only. Through the API when the instance has a key, otherwise\n"
+                "from the order window in E37 Admin via the person's login. Contains personal\n"
+                "data (name, e-mail, phone, addresses): show only what the question needs.\n\n"
+                "JSON via the web: order_id, order_timestamp, order_status, site, customer_number,\n"
+                "customer_type, vat, payment{method,status,invoice_number}, delivery{method,\n"
+                "pickup_point}, other (e.g. ERP sync), addresses, contact, rows[{sku, name,\n"
+                "quantity, unit_price, sum}], summary{label: amount}, notes.\n"
+                "JSON via the API: E37's Order object (see docs/order-api.md).",
                 "example:\n  e37 order show 1189437 --account vartex-outdoor --json")
     s.add_argument("id", type=int, help="E37 order number")
     _account_flag(s)
+    s.add_argument("--via", choices=("api", "web"), help="force a route; default API with a key, else web")
     _json_flag(s)
     s.set_defaults(fn=cmd_order_show)
 
     s = _parser(sub, "status", "one order's current status",
-                "Current status of one order (NewOrder, Delivered, Cancelled, ...). Read-only.",
+                "Current status of one order. Read-only. API when there is a key, else the web:\n"
+                "order_status (Mottagen/ny, Levererad, Annullerad, ...), payment_status, ERP sync.",
                 "example:\n  e37 order status 1189437 --account vartex-outdoor --json")
     s.add_argument("id", type=int, help="E37 order number")
     _account_flag(s)
+    s.add_argument("--via", choices=("api", "web"), help="force a route; default API with a key, else web")
     _json_flag(s)
     s.set_defaults(fn=cmd_order_status)
 

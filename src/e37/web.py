@@ -161,6 +161,120 @@ class Session:
         return (self.report(ORDERFLOW_REPORT, values) or {}).get("rows", [])
 
 
+    # ---- one order -------------------------------------------------------------
+
+    def order(self, order_id):
+        """One order as E37 Admin's order window shows it, or None if E37 has none.
+
+        The window opens with a postback (`viewOrder?ID` on orders.aspx), which a
+        plain synchronous POST renders into the page. Only that postback is sent.
+        The window also holds buttons that change the order — activate, cancel,
+        change delivery, resend confirmation, set status — and none of them is
+        ever posted from here.
+        """
+        _, html = self._page(ORDERS_PAGE)
+        data = _form(html)
+        data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": f"viewOrder?{int(order_id)}"})
+        _, html = self._page(ORDERS_PAGE, data)
+        return _parse_order(html, int(order_id))
+
+
+ORDERS_PAGE = "workspace/workwith/orders.aspx"
+_TAB1 = "ctl00_cph1_ModalPopup1_pnl_usrCtrl_PopupTab1"
+
+
+def _text(fragment):
+    """Visible text of an HTML fragment, <br> as newline, whitespace tidied."""
+    s = re.sub(r"<br\s*/?>", "\n", fragment)
+    s = unescape(re.sub(r"<[^>]+>", " ", s))
+    lines = [re.sub(r"[ \t\xa0]+", " ", ln).strip() for ln in s.split("\n")]
+    return "\n".join(ln for ln in lines if ln)
+
+
+def _amount(s):
+    """'1 099 kr' or '879,20 kr' -> 1099.0 / 879.2; None when there is no number."""
+    m = re.search(r"-?[\d\s\xa0]+(?:,\d+)?", s or "")
+    if not m or not re.search(r"\d", m.group(0)):
+        return None
+    return float(re.sub(r"[\s\xa0]", "", m.group(0)).replace(",", "."))
+
+
+def _when_text(s):
+    """E37 writes recent times as 'Idag 22:53' / 'Igår 08:10'; make them dates."""
+    from datetime import date, timedelta
+    s = (s or "").strip()
+    for word, days in (("Idag", 0), ("Igår", 1)):
+        if s.startswith(word):
+            return f"{date.today() - timedelta(days=days):%Y-%m-%d}{s[len(word):]}"
+    return s
+
+
+def _parse_order(html, order_id):
+    start = html.find(f'id="{_TAB1}"')
+    if start < 0:
+        return None
+    end = html.find('id="ctl00_cph1_ModalPopup1_pnl_usrCtrl_PopupTab2"', start)
+    tab = re.sub(r"<script.*?</script>|<style.*?</style>", "", html[start:end if end > 0 else None], flags=re.S)
+
+    pieces = {}
+    for m in re.finditer(r'<div[^>]*class="piece"[^>]*>(.*?)<span[^>]*class="bigtext"[^>]*>(.*?)</span>', tab, re.S):
+        pieces[_text(m.group(1)).rstrip(":")] = _text(m.group(2))
+    number = pieces.pop("Ordernummer", "")
+    if str(order_id) != number.strip():
+        return None
+    fields = {_text(k).rstrip(":"): _text(v) for k, v in
+              re.findall(r"<tr[^>]*>\s*<td[^>]*>([^<]{2,40}:)\s*</td>\s*<td[^>]*>(.*?)</td>\s*</tr>", tab, re.S)}
+
+    addresses, contact = {}, {}
+    for label, body in re.findall(r'<div class="addressItem"><label class="cart">([^<]*)</label>(.*?)</div>', tab, re.S):
+        value = _text(body)
+        (addresses if "\n" in value or "adress" in label.lower() else contact)[unescape(label)] = value
+
+    rows = []
+    cart = re.search(r'id="%s_cartTable".*?</table>' % _TAB1, tab, re.S)
+    for tr in re.findall(r'<tr[^>]*class="cartRow[^"]*"[^>]*>(.*?)</tr>', cart.group(0) if cart else "", re.S):
+        cells = [_text(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)]
+        if len(cells) >= 6:
+            rows.append({"sku": cells[0], "name": cells[1].replace("\n", " / "), "quantity": _amount(cells[3]),
+                         "unit_price": _amount(cells[4]), "sum": _amount(cells[5]), "price_text": cells[5]})
+
+    summary = {}
+    osum = re.search(r'class="orderSummary".*?</table>', tab, re.S)
+    for label, value in re.findall(r"<tr[^>]*>\s*<td[^>]*>(.*?)</td>\s*<td[^>]*>(.*?)</td>", osum.group(0) if osum else "", re.S):
+        summary[_text(label)] = _amount(_text(value))
+
+    def box(name):
+        m = re.search(r'id="%s_roundedBox%s".*?<span class="subtitle">\s*-\s*([^<]*)</span>' % (_TAB1, name), tab, re.S)
+        return unescape(m.group(1)).strip() if m else None
+
+    status = re.search(r'<select[^>]*ddlOrderStatus[^>]*>(.*?)</select>', tab, re.S)
+    chosen = re.search(r'<option[^>]*selected[^>]*>([^<]*)', status.group(1)) if status else None
+    notes_box = re.search(r'id="%s_roundedBoxComments_divContent"[^>]*>(.*?)<input' % _TAB1, tab, re.S)
+
+    return {
+        "order_id": order_id,
+        "order_timestamp": _when_text(pieces.pop("Datum & tid", "")),
+        "customer_number": pieces.pop("Kundnummer", None),
+        "order_status": unescape(chosen.group(1)).strip() if chosen else None,
+        "site": fields.get("Webbplats"),
+        "customer_type": fields.get("Kundtyp"),
+        "vat": fields.get("Momsland och typ"),
+        "accepts_marketing": fields.get("Accepterat marknadsföring"),
+        "referer": fields.get("Hänvisning"),
+        "source": fields.get("Källa"),
+        "order_confirmation": (fields.get("Orderbekräftelse") or "").split(" - ")[0] or None,
+        "payment": {"method": box("Payment"), "status": fields.get("Status"), "invoice_number": fields.get("Fakturanr")},
+        "delivery": {"method": box("Delivery"), "pickup_point": _text(re.search(
+            r"<label>Utlämningsställe:</label>(.*?)</div>", tab, re.S).group(1)) if "Utlämningsställe:" in tab else None},
+        "other": pieces,          # e.g. ERP sync status, labelled as E37 labels it
+        "addresses": addresses,
+        "contact": contact,
+        "rows": rows,
+        "summary": summary,
+        "notes": (_text(notes_box.group(1)) or None) if notes_box else None,
+    }
+
+
 # ---- HTML helpers --------------------------------------------------------------
 
 def _options(select_html):
