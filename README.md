@@ -16,7 +16,11 @@ välj **Code**, och skriv:
 
 Claude installerar, och öppnar ett fönster där du själv fyller i dina E37-uppgifter.
 Claude ser dem aldrig. Sedan kan du fråga Claude saker som "vilka ordrar kom in
-i förmiddags?".
+i förmiddags?". Claude kommer ihåg verktyget i nya samtal, eftersom installationen
+lägger en skill i `~/.claude/skills/e37/`.
+
+**Ny version:** säg "uppdatera e37" till Claude, eller kör `python -m e37 update`.
+Kontona ligger kvar.
 
 ## Installera
 
@@ -36,6 +40,9 @@ Kräver Python 3.9+. Inga tredjepartsberoenden.
 ## Använd
 
 ```
+e37 update               hämta senaste versionen och uppdatera Claude-skillen
+e37 --version
+
 e37 account list         dina E37-instanser (aldrig nycklarna), add/remove
 
 e37 order flow           orderflödesrapporten, föregående stängda halvtimme

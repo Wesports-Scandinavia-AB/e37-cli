@@ -23,7 +23,10 @@ standardbiblioteket, argparse, entry point `e37`.
 - `src/e37/dialog.py`: fönstret för `e37 account add --dialog` (tkinter, med osascript som reserv på macOS). Hemligheter matas in av människan, aldrig via en assistent.
 - `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
 - `docs/`: Order-API, MCP, webbgränssnittet (`docs/web.md`).
-- `INSTALL-FOR-CLAUDE.md`: instruktion till kollegors Claude, för installation och användning. Håll den i takt med kommandona.
+- `src/e37/skill/SKILL.md`: skillen som `e37 skill install` och `e37 update` lägger i `~/.claude/skills/e37/`. Den är den enda beskrivningen av hur en assistent använder `e37`. Ändras ett kommando, ändra skillen i samma commit.
+- `INSTALL-FOR-CLAUDE.md`: bara installationen, sedan pekar den på skillen. Upprepa inte kommandoreferensen där.
+
+Versionen står bara i `src/e37/__init__.py` (`pyproject.toml` läser den därifrån). Höj den vid varje ändring som användare märker, så att `e37 update` visar att något hänt.
 
 Repot är publikt. Interna anteckningar (korrespondens, leverantörsbedömningar, underlag från andra bolag) hör hemma i det privata `e37-notes`, inte här.
 

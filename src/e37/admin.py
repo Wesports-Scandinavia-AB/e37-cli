@@ -84,7 +84,7 @@ def accounts():
 
     names = keychain.names()
     if not names:
-        raise E37Error("Inga E37-konton. Lägg till ett med: e37 account add NAMN "
+        raise E37Error("Inga E37-konton. Lägg till ett med: e37 account add NAMN --dialog "
                        "(eller sätt E37_ACCOUNT/E37_WEBSHOP_ID/E37_API_KEY).")
     return [_checked(n, keychain.get(n) or {}) for n in names]
 
@@ -104,7 +104,7 @@ def _checked(name, a):
 def _need_key(account):
     if not account["key"]:
         raise E37Error(f"E37-kontot {account['name']} saknar API-nyckel. "
-                       f"Lägg till den med: e37 account add {account['name']}")
+                       f"Lägg till den med: e37 account add {account['name']} --dialog")
 
 
 def resolve_account(ref=None):
