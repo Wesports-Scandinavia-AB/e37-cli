@@ -4,12 +4,9 @@ Anteckningar om E37: API-endpoints, autentisering, MCP-upplägg och beslut.
 
 | Fil | Innehåll |
 |---|---|
-| [order-api.md](order-api.md) | E37 Order API: orderflödesrapporten, Triton Admin REST API, statuswebhook, pollningsrecept, kända butiker och öppna frågor till E37. Sammanställd 2026-09-03. |
-| [order-api.pdf](order-api.pdf) | Samma dokument som PDF. |
-| [triton-admin-1.0.openapi.json](triton-admin-1.0.openapi.json) | OpenAPI 3.1-spec för Triton Admin REST API, hämtad från `https://admin3.e37.se/docs/Triton-Admin-1.0.json` 2026-09-03. |
+| [order-api.md](order-api.md) | E37 Order API: orderflödesrapporten, Triton Admin REST API, statuswebhook, pollningsrecept och öppna frågor. Specen själv finns hos E37: <https://admin3.e37.se/docs/>. |
 | [mcp.md](mcp.md) | E37:s publika MCP-server per butik (verktyg, protokoll, svarsformat). |
-| [web.md](web.md) | Karta över E37 Admin som webbgränssnitt: inloggning, butiksväljare, artikelregister, variantdialog, luckor i API:et och hur vi bygger `e37 web`. Underlag från NET AB:s e37-automation. |
-| [mcp-chat-test.md](mcp-chat-test.md) | Test av att chatta om produkter via MCP:n på Addnature. Vad som fungerar, vad som inte gör det, och vad vår egen MCP behöver kompensera för. |
+| [web.md](web.md) | Karta över E37 Admin som webbgränssnitt: inloggning, butiksväljare, artikelregister, variantdialog, luckor i API:et och hur vi bygger `e37 web`. |
 
 ## Översikt över E37:s ytor
 

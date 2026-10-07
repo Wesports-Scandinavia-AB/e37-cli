@@ -2,7 +2,7 @@
 
 Karta över E37 Admin (`https://admin3.e37.se/`) som webbgränssnitt, och hur vi bygger mot det. Underlag för en modul `src/e37/web.py` som gör det API:et inte kan. Modulen finns inte än.
 
-Selektorer och flöden kommer från North European Trust AB:s repo `e37-automation` (Alexander, kartlagt 2026-10-06 mot Rull SE/DK/FI och Ruller NO). Den koden körs med Playwright och styr ett riktigt webbläsarfönster. Ingenting här är verifierat från vår sida än. Markera det som **[verifierat ÅÅÅÅ-MM-DD]** när vi själva har sett det.
+Selektorer och flöden är kartlagda 2026-10-06 med Playwright mot en riktig instans med fyra webbplatser. Ingenting här är verifierat med `e37-cli` än. Markera det som **[verifierat ÅÅÅÅ-MM-DD]** när vi själva har sett det.
 
 ## Grunder
 
@@ -23,14 +23,14 @@ E37 Admin är ASP.NET WebForms, inte JSON-endpoints:
 | Knapp | **Logga in** |
 | Lyckad | Sidan efter inloggning har butiksväljaren `#ctl00_ddlSitePicker` |
 
-Det är en personlig inloggning (e-post och lösenord), inte API-nyckeln. Webbshop-ID är troligen samma värde som användarnamnet i REST-API:ts Basic-auth (`webshopId` i kontot), men det är **[overifierat]**. Ett webbshop-ID omfattar flera webbplatser. För NET AB är det Rull SE, Rull DK, Rull FI och Ruller NO.
+Det är en personlig inloggning (e-post och lösenord), inte API-nyckeln. Webbshop-ID är troligen samma värde som användarnamnet i REST-API:ts Basic-auth (`webshopId` i kontot), men det är **[overifierat]**. Ett webbshop-ID omfattar flera webbplatser. En instans kan till exempel ha en butik per land.
 
 ## Butiksväljaren
 
 | | |
 |---|---|
 | Element | `<select id="ctl00_ddlSitePicker">` |
-| Options | Webbplatsnamn, standardbutiken med suffix: `Rull SE (standard)`, `Rull DK`, `Rull FI`, `Ruller NO`. Matcha med "börjar med". |
+| Options | Webbplatsnamn, standardbutiken med suffix: `Butik SE (standard)`, `Butik DK`, `Butik FI`, `Butik NO`. Matcha med "börjar med". |
 | Synlighet | **Dold** bakom E37:s egen dropdown. Den finns i DOM:en men syns inte. |
 | Byte | Sätt `value` och skicka `change`, så görs en postback. Utan webbläsare blir det en POST med `__EVENTTARGET=ctl00$ddlSitePicker` och det nya värdet. |
 | Kontroll | Läs vald option efter omladdningen. Står den inte på rätt butik, avbryt. |
@@ -60,7 +60,7 @@ Sökningen matchar på delsträng. Kräv **exakt** träff på länktexten och ex
 | Avbryt | `#ctl00_cph1_mod1_pnl_usrCtrl_btnCancel` |
 | Stängd | Sparknappen blir dold |
 
-`mod1_pnl_usrCtrl` tyder på en UserControl i en UpdatePanel, alltså en AJAX-postback. Det är troligen det som gör att `e37-automation` behöver en riktig webbläsare.
+`mod1_pnl_usrCtrl` tyder på en UserControl i en UpdatePanel, alltså en AJAX-postback. Det är troligen därför kartläggningen behövde en riktig webbläsare.
 
 ### Kända fält
 
@@ -74,13 +74,13 @@ Fälten skrivs genom att sätta `value` och skicka `input`, `change`, `keyup` oc
 
 | Lucka | Varför webben | Källa |
 |---|---|---|
-| Läsa och skriva leveranstidstext per variant och webbplats | Fältet finns inte i Triton Admin REST API, som bara har ordrar och presentkort. Det finns inte heller i E37:s inbyggda export ("Exportera sökresultat", "Exportfiler"). | `e37-automation` |
+| Läsa och skriva leveranstidstext per variant och webbplats | Fältet finns inte i Triton Admin REST API, som bara har ordrar och presentkort. Det finns inte heller i E37:s inbyggda export ("Exportera sökresultat", "Exportfiler"). | kartläggningen 2026-10-06 |
 
 Fyll på tabellen när fler luckor dyker upp. Varje funktion i `web.py` ska peka hit.
 
 ## Att bygga hos oss
 
-Samma förmåga som `e37-automation`, gjord som resten av `e37-cli`:
+Gjort som resten av `e37-cli`:
 
 ```
 e37 web login-check                    logga in, lista webbplatserna, logga ut
@@ -90,7 +90,7 @@ e37 web delivery-text set FIL          sätt från CSV/xlsx (art-nr;datum), --dr
 ```
 
 - **Konto:** webbinloggningen finns redan i kontot, som `web: {"email", "password"}` i nyckelringsposten. Den fylls i med `e37 account add`. Webbshop-ID tas från `webshopId`. Aldrig i repot och aldrig i loggar eller felsökningsfiler.
-- **Flera instanser samtidigt:** vi behöver vara inloggade i flera E37-instanser på en gång, till exempel WeSports egna butiker och NET AB:s Rull-butiker. Varje instans är en egen post i nyckelringen med eget webbshop-ID, egen server (admin2 eller admin3) och egen inloggning. Därför:
+- **Flera instanser samtidigt:** vi behöver vara inloggade i flera E37-instanser på en gång, till exempel två bolags butiker. Varje instans är en egen post i nyckelringen med eget webbshop-ID, egen server (admin2 eller admin3) och egen inloggning. Därför:
   - **En session per konto.** Det är ett eget `Session`-objekt med egen cookie-jar. Ingenting i `web.py` får vara global state, så att två konton kan köras i samma process eller i varsin.
   - **Butiksvalet sitter i sessionen på serversidan.** Två jobb mot samma konto som delar session byter butik under fötterna på varandra, och det märks inte förrän fel butik har fått en ändring. Varje körning loggar därför in i en egen session och delar den inte. Kontrollera butiksvalet igen innan varje skrivning, inte bara efter bytet.
   - **Sessioner sparas inte mellan körningar** i första versionen. Inloggningen är ett enda POST-anrop. Behövs det senare, lägg sessionscookien i nyckelringen bredvid kontot, inte i en fil.
@@ -100,21 +100,14 @@ e37 web delivery-text set FIL          sätt från CSV/xlsx (art-nr;datum), --dr
 - **Motor:** Scrapling, `e37-cli[web]`. Pröva i den här ordningen:
   1. `Fetcher` med session och ren POST: inloggning, butiksbyte och sök är vanliga postbacks och bör gå utan webbläsare. Billigt och snabbt, och fungerar på en server.
   2. Variantdialogen är troligen en UpdatePanel. Den går att posta direkt (`ScriptManager`-fältet, `__ASYNCPOST=true`, svaret i `|`-separerat delta-format), men det är skört. Fungerar det inte, ta `DynamicFetcher` med `page_action` för just det steget.
-- **Säkerhet vid skrivning**, samma regler som `e37-automation` och `wsg`:
+- **Säkerhet vid skrivning**, samma regler som i resten av paketet:
   - `--dry-run` är standard för ny logik. Kör först med `--limit 2`.
   - Läs tillbaka varje sparat värde. Avvikelse blir `FEL: sparat värde är '...'`.
   - Ett fel på en artikel loggas och körningen går vidare. Exit 1 om något fel uppstod.
   - CSV-logg med webbplats, artikel, gammalt värde, nytt värde och status, `;`-separerad, utf-8-sig, så att Excel öppnar den rätt.
   - Hoppa över det som redan har rätt värde (`oförändrad`) i stället för att spara igen.
-- **Excel utan pandas:** en xlsx-fil är en zip med XML. Två kolumner går att läsa med `zipfile` och `xml.etree`. Tar vi CSV också slipper Alex konvertera.
+- **Excel utan pandas:** en xlsx-fil är en zip med XML. Två kolumner går att läsa med `zipfile` och `xml.etree`. Tar vi CSV också slipper användaren konvertera.
 - **Felsökning:** spara HTML (inte skärmbilder) i `logs/` när något går fel. Töm lösenordsfält först.
-
-## Att återkoppla till e37-automation
-
-Sett vid genomläsningen 2026-10-07:
-
-- Workflowen skickar `--export` och `CLAUDE.md` beskriver den, men skriptet har ingen sådan flagga. Kryssas *Exportera* i Actions avbryter argparse körningen direkt.
-- Danska texten skiljer sig åt. README säger `Forventes på lager igen`, skriptet och `CLAUDE.md` säger `Forventes tilbage på lager`. Det är skriptets text som hamnar i butiken.
 
 ## Regler
 

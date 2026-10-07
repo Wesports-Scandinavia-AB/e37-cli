@@ -1,8 +1,8 @@
 # E37 Order API Reference
 
-*WeSports central order database · integration notes*
+*Integration notes for `e37-cli`*
 
-Everything we currently know about pulling order data out of the E37 webshop platform: the new order flow report, the existing Triton Admin REST API, and the status webhook. Compiled from E37's own documentation and correspondence so the integration team can start designing before the API key is in hand.
+Everything we currently know about pulling order data out of the E37 webshop platform: the new order flow report, the existing Triton Admin REST API, and the status webhook. Compiled from E37's public documentation and the report UI.
 
 | | |
 |---|---|
@@ -10,32 +10,9 @@ Everything we currently know about pulling order data out of the E37 webshop pla
 | Platform | E37 Triton Admin 1.0 |
 | Vendor contact | support@e37.se |
 
-## Contents
+## Status
 
-1. [Where we stand](#where-we-stand)
-2. [Two APIs, one key](#two-apis-one-key)
-3. [Authentication](#authentication)
-4. [Order flow report](#order-flow-report)
-5. [Polling recipe](#polling-recipe)
-6. [Triton Admin REST API](#triton-admin-rest-api)
-7. [Order status webhook](#order-status-webhook)
-8. [Suggested integration](#suggested-integration)
-9. [Known shops and sites](#known-shops-and-sites)
-10. [Open questions for E37](#open-questions-for-e37)
-11. [Sources](#sources)
-
----
-
-## Where we stand
-
-| Area | Status | Notes |
-|---|---|---|
-| Report endpoint | **Live** | Delivered by E37 on 27 Aug 2026. URL shape and JSON fields confirmed from screenshots. |
-| REST API | **Documented** | Public OpenAPI spec at admin3.e37.se/docs. Four endpoints, one webhook payload. |
-| API key | **Blocked** | Creating a key in E37 Admin currently fails with an error. Tommy is in contact with E37. |
-| Historical backfill | **Pending** | E37 offered to discuss one-off exports of older order data as a next step. |
-
-Nothing in this document has been exercised against a live endpoint yet. Items marked **[unverified]** are inferred and need a real call or a confirmation from E37.
+Nothing in this document has been exercised against a live endpoint yet: it is built from E37's public OpenAPI spec and the report UI. Items marked **[unverified]** are inferred and need a real call or a confirmation from E37. When `e37-cli` gets a live response that disagrees, this document is wrong and gets fixed.
 
 ## Two APIs, one key
 
@@ -47,20 +24,20 @@ E37 exposes order data through two separate mechanisms that share the same API k
 | **Triton Admin REST API** `/api/orders/{id}` and friends | Full detail for one order: customer, addresses, payment, delivery, rows. Also marketplace order creation and gift cards. | HTTP Basic: webshop ID as username, API key as password | JSON |
 | **Order status webhook** | Push notification when an order's status changes, with tracking data. | Registered in E37 Admin (outbound from E37) | JSON POST to our URL |
 
-Fredrik Karlsson at E37 explicitly recommends combining the first two: poll the report for new order numbers, then call the REST API per order for the details the report does not carry.
+E37 recommends combining the first two: poll the report for new order numbers, then call the REST API per order for the details the report does not carry.
 
 ## Authentication
 
 ### Creating the key
 
-The OpenAPI spec says only that a key is created "in your webshop's back-end", meaning E37 Admin at <https://admin3.e37.se>. The exact menu location is not documented in E37's public help centre. Christian Ekman at WeSports created a key for the Qlik feeder in December 2025, so the procedure has worked before. Key creation currently returns an error; E37 has been asked.
+The OpenAPI spec says only that a key is created "in your webshop's back-end", meaning E37 Admin at <https://admin3.e37.se>. The exact menu location is not documented in E37's public help centre.
 
 Treat the key as a password. Store it in a secret store or environment variable, never in a script, ticket or chat.
 
 ### Report endpoint: query parameter
 
 ```
-GET https://admin3.e37.se/api/reports/orderflow?account=cykloteket&key=<API KEY>&...
+GET https://admin3.e37.se/api/reports/orderflow?account=<account>&key=<API KEY>&...
 ```
 
 The key travels in the URL. Over HTTPS it is encrypted in transit, but it will land in E37's web server logs, Cloudflare logs, browser history and anywhere the URL is pasted. Keep the key out of shared documents and mask it in our own logs.
@@ -85,7 +62,7 @@ Example URL exactly as E37's screenshot shows it, with the key placeholder:
 
 ```
 https://admin3.e37.se/api/reports/orderflow
-  ?account=cykloteket
+  ?account=<account>
   &key=<INSERT API KEY>
   &dateInterval=2026-08-26+18%3a30%2c2026-08-26+19%3a30
   &orderTimestampMode=completed
@@ -93,7 +70,7 @@ https://admin3.e37.se/api/reports/orderflow
 
 | Parameter | Value | Notes |
 |---|---|---|
-| `account` | Shop account slug, e.g. `cykloteket` | One E37 account can host several sites (shop-in-shop). Whether one key covers all accounts is **[unverified]**. |
+| `account` | Shop account slug, e.g. `<account>` | One E37 account can host several sites (shop-in-shop). Whether one key covers all accounts is **[unverified]**. |
 | `key` | API key | Created in E37 Admin. |
 | `dateInterval` | `YYYY-MM-DD HH:MM,YYYY-MM-DD HH:MM` | Start and end separated by a comma. URL-encoded: space becomes `+`, colon `%3a`, comma `%2c`. Inclusive/exclusive boundaries are **[unverified]**. |
 | `orderTimestampMode` | `completed` | Filter on the time the payment provider confirmed the order (Klarna, Svea callback etc.), not the creation time. This is what makes gap-free polling possible. Other values presumably exist for creation time; **[unverified]**. |
@@ -116,7 +93,7 @@ A JSON object with a `rows` array. Each row:
 | `language` | `SV` | Also seen: NO, DA. |
 | `person_type` | `Privatperson` | Customer type as text. Company orders presumably differ; **[unverified]**. |
 | `site_id` | `4` | Site (shop-in-shop) numeric ID. See [Known shops and sites](#known-shops-and-sites). |
-| `site_name` | `Bikester SE` | Site display name. |
+| `site_name` | `Example Shop SE` | Site display name. |
 
 Example:
 
@@ -134,7 +111,7 @@ Example:
       "language": "SV",
       "person_type": "Privatperson",
       "site_id": 4,
-      "site_name": "Bikester SE"
+      "site_name": "Example Shop SE"
     }
   ]
 }
@@ -178,14 +155,14 @@ PowerShell, with the key in an environment variable:
 $env:E37_KEY = "paste-key-here"
 $from = "2026-09-02+08%3a00"
 $to   = "2026-09-02+08%3a30"
-curl.exe "https://admin3.e37.se/api/reports/orderflow?account=cykloteket&key=$env:E37_KEY&dateInterval=$from%2c$to&orderTimestampMode=completed"
+curl.exe "https://admin3.e37.se/api/reports/orderflow?account=<account>&key=$env:E37_KEY&dateInterval=$from%2c$to&orderTimestampMode=completed"
 ```
 
 Bash:
 
 ```bash
 export E37_KEY="paste-key-here"
-curl -s "https://admin3.e37.se/api/reports/orderflow?account=cykloteket&key=${E37_KEY}&dateInterval=2026-09-02+08%3a00%2c2026-09-02+08%3a30&orderTimestampMode=completed" | jq '.rows | length'
+curl -s "https://admin3.e37.se/api/reports/orderflow?account=<account>&key=${E37_KEY}&dateInterval=2026-09-02+08%3a00%2c2026-09-02+08%3a30&orderTimestampMode=completed" | jq '.rows | length'
 ```
 
 ## Triton Admin REST API
@@ -199,7 +176,7 @@ Source: OpenAPI 3 spec "Triton Admin 1.0", published at <https://admin3.e37.se/d
 | web02 | `https://admin2.e37.se/api` |
 | web03 | `https://admin3.e37.se/api` |
 
-Each webshop lives on one of these servers. Fredrik's links and the report screenshots all point at web03, so WeSports shops are presumably on admin3. Confirm per shop.
+Each webshop lives on one of these servers. Confirm per shop; `e37-cli` defaults to admin3.
 
 ### `GET /orders/{id}`
 
@@ -251,7 +228,7 @@ curl -u "<WEBSHOP ID>:<API KEY>" https://admin3.e37.se/api/orders/1189437
 | `isPackageRoot`, `subRows` | Bundle structure |
 | `additionalInfo`, `attachment` | Free text and file attachment |
 
-Note what is **not** in the Order object: discount or campaign rows as separate lines, status history, and delivery promise. Those were on Niklas's wish list for the one-off export and need to come from E37 directly or from the status webhook over time.
+Note what is **not** in the Order object: discount or campaign rows as separate lines, status history, and delivery promise. They have to come from E37 directly or from the status webhook over time.
 
 ### `GET /orders/{id}/status`
 
@@ -308,44 +285,23 @@ The spec does not describe webhook authentication, signing or retry behaviour. W
 1. **Poll the order flow report** every 30 minutes per shop account, previous half-hour window, `orderTimestampMode=completed`. Store the rows as the order header table.
 2. **Enrich per order** with `GET /orders/{id}` for customer, addresses, payment, delivery and rows. Store rows in an order-lines table keyed on order ID and row ID.
 3. **Subscribe to the status webhook** to build status history and capture tracking numbers, instead of polling `/orders/{id}/status`.
-4. **Backfill history** through E37's offered one-off export. The report endpoint may also accept long date intervals, which would allow a slow self-serve backfill; volume limits are **[unverified]**.
+4. **Backfill history** through a one-off export from E37. The report endpoint may also accept long date intervals, which would allow a slow self-serve backfill; volume limits are **[unverified]**.
 5. **Reconcile** daily by re-fetching the previous day's windows and comparing counts, to catch any window lost to an outage.
 
-## Known shops and sites
+## Open questions
 
-From E37's report screenshot and recent correspondence. The `account` slug for each is only confirmed for Cykloteket.
-
-| site_id | site_name | Currency seen | Notes |
-|---:|---|---|---|
-| 1 | Cykloteket | SEK | `account=cykloteket` in E37's example |
-| 4 | Bikester SE | SEK | |
-| 5 | Bikester DK | DKK | |
-| 7 | Bikester NO | NOK | |
-| 9 | Birk Sport | NOK | |
-
-Separately, E37 confirmed on 2 September 2026 that vartex.se and masterfitness.se share one order number series in E37, and that a Svea Checkout session reserves an order number when a customer reaches checkout. Reserved numbers that never complete explain gaps in the sequence. Other WeSports shops on E37 (Vartex Outdoor, Outdoorexperten, Addnature, Larunpyörä) will each need their own account slug and possibly their own key.
-
-## Open questions for E37
-
-1. API key creation in E37 Admin fails with an error. What is the correct path, and is a permission missing on our user?
-2. Is one key valid across all WeSports accounts and sites, or is it per webshop ID?
+1. Where in E37 Admin is the API key created?
+2. Is one key valid across all accounts and sites under a webshop ID?
 3. Can the report endpoint accept the key via Basic auth header, like the REST API?
 4. What timezone are `order_timestamp` and the `dateInterval` filter in? Are interval boundaries inclusive at both ends?
 5. Are there rate limits, a maximum interval length or a maximum row count per call?
 6. What are the JSON field names for the optional extra columns, and do site and status filters appear as query parameters?
 7. What other values does `orderTimestampMode` accept?
 8. Where is the status webhook URL registered, and is the payload signed?
-9. Scope and timing of the one-off historical export: full tables, or the report endpoint over long intervals?
-10. Which server, admin2 or admin3, hosts each WeSports shop?
+9. How is a shop's server, admin2 or admin3, found out other than by trying?
 
 ## Sources
 
-- Email from Fredrik Karlsson, CEO and database architect at E37 System AB, 27 August 2026, "Sv: Engångsexport av orderhistorik – WeSports butiker", with six screenshots of the report UI, table output, JSON output and generated URL.
-- Email from Niklas Hammar, WeSports, 2 August 2026, original request for a full order history export.
-- Email from Fredrik Karlsson, 2 September 2026, "Sv: Hopp i orderserien", on shared order number series and Svea reservations.
 - OpenAPI 3 specification "Triton Admin 1.0", <https://admin3.e37.se/docs/Triton-Admin-1.0.json>, rendered at <https://admin3.e37.se/docs/>.
-- E37 help centre, <https://support.e37.se/hc/sv>, searched for API key documentation on 3 September 2026. No article covers creating E37's own API key.
-
----
-
-*Compiled for the WeSports central order database project by Tommy Ivarsson, Vartex. Vendor: E37 System AB, support@e37.se. Update this document when E37 answers the open questions or when the first live call succeeds.*
+- The order flow report as shown in E37 Admin under **E-handel → Rapporter**.
+- E37 help centre, <https://support.e37.se/hc/sv>.

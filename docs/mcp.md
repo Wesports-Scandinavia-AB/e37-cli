@@ -110,7 +110,7 @@ URI:er: `products://search?q=<query>`, `products://<sku>`, `categories://current
 
 ## Kända brister
 
-Se `mcp-chat-test.md`. Kort: `categories[]` och `tags[]` har ingen effekt, `max_nr_of_products` begränsas inte till 100, 1-teckens query ger HTTP 500, ingen stavningstolerans, inga strukturerade specar.
+Sett vid test 2026-09-03: `categories[]` och `tags[]` har ingen effekt, `max_nr_of_products` begränsas inte till 100, 1-teckens query ger HTTP 500, ingen stavningstolerans, inga strukturerade specar.
 
 ## Att tänka på för vår klient
 
