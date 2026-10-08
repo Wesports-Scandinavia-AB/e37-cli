@@ -340,6 +340,140 @@ def cmd_order_status(a):
     return 0
 
 
+# ---- delivery text -------------------------------------------------------------
+
+def _articles_from(a):
+    arts = [(x, None) for x in (a.articles or [])]
+    if a.file:
+        from . import tables
+        arts += tables.article_rows(a.file)
+    if not arts:
+        raise E37Error("Ange artikelnummer eller --file med kolumnen art-nr.")
+    return arts[:a.limit] if a.limit else arts
+
+
+def _sites_from(s, a):
+    if not a.site:
+        raise E37Error("Ange minst en --site (namn eller id). Lista med: e37 sites --account NAMN")
+    out = []
+    for ref in a.site:
+        sid = _resolve_site(s, ref)
+        name = dict(s.sites())[sid].replace("(standard)", "").strip()
+        out.append((sid, name))
+    return out
+
+
+def _write_log(path, rows):
+    import csv
+    from pathlib import Path
+    p = Path(path)
+    with p.open("w", newline="", encoding="utf-8-sig") as f:   # utf-8-sig: Excel opens it right
+        w = csv.DictWriter(f, fieldnames=["konto", "webbplats", "art_nr", "gammalt", "nytt", "status"], delimiter=";")
+        w.writeheader()
+        w.writerows(rows)
+    return p.resolve()
+
+
+def cmd_delivery_get(a):
+    acc = admin.resolve_account(a.account)
+    s = web.Session(acc)
+    arts = _articles_from(a)
+    out = []
+    for sid, sname in _sites_from(s, a):
+        s.switch_site(sid)
+        for art, _ in arts:
+            rec = {"konto": acc["name"], "webbplats": sname, "art_nr": art, "gammalt": "", "nytt": "", "status": ""}
+            try:
+                _, lang, value = s.delivery_text(art)
+                rec.update(gammalt=value, status=f"ok ({lang})")
+            except E37Error as e:
+                rec["status"] = f"FEL: {e}"
+            out.append(rec)
+            if not a.json:
+                print(f"{sname:<22} {art:<16} {rec['gammalt']!r}  {'' if rec['status'].startswith('ok') else rec['status']}")
+    if a.csv:
+        print(f"Sparat: {_write_log(a.csv, out)}", file=sys.stderr)
+    if a.json:
+        _dump([{"site": r["webbplats"], "art_nr": r["art_nr"], "text": r["gammalt"], "status": r["status"]} for r in out])
+    return 1 if any(r["status"].startswith("FEL") for r in out) else 0
+
+
+def cmd_delivery_set(a):
+    """Dry run unless --apply. One article failing is logged and the run goes on;
+    other fields changing on save stops everything at once."""
+    from datetime import datetime
+    acc = admin.resolve_account(a.account)
+    s = web.Session(acc)
+    arts = _articles_from(a)
+    sites = _sites_from(s, a)
+    per_site = {}
+    for spec in a.site_text or []:
+        if "=" not in spec:
+            raise E37Error(f"--site-text väntar WEBBPLATS=TEXT, fick {spec!r}")
+        ref, tmpl = spec.split("=", 1)
+        per_site[_resolve_site(s, ref)] = tmpl
+    if a.text is None and not all(sid in per_site for sid, _ in sites):
+        raise E37Error("Ange --text 'Förväntas åter i lager: {date}', eller --site-text per webbplats.")
+    log = a.log or f"e37-leveranstid-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+
+    # The text belongs to the site's LANGUAGE, not the site: every Swedish site shows
+    # the same field (verified 2026-10-08). Find each site's language first, and refuse
+    # two sites of one language with different texts before anything is written.
+    lang_of, first_site = {}, {}
+    for sid, sname in sites:
+        s.switch_site(sid)
+        _, lang, _ = s.delivery_text(arts[0][0])
+        lang_of[sid] = lang
+        tmpl = per_site.get(sid, a.text)
+        if lang in first_site and per_site.get(first_site[lang][0], a.text) != tmpl:
+            raise E37Error(f"{sname} och {first_site[lang][1]} delar språk ({lang}) och därmed samma fält, "
+                           f"men har olika text. Välj en av dem, eller samma text.")
+        first_site.setdefault(lang, (sid, sname))
+    out, stop = [], None
+    print(f"{len(arts)} artiklar × {len(sites)} webbplatser på {acc['name']}"
+          f"{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}", file=sys.stderr)
+    for sid, sname in sites:
+        if stop:
+            break
+        s.switch_site(sid)
+        tmpl = per_site.get(sid, a.text)
+        owner = first_site[lang_of[sid]]
+        for art, d in arts:
+            rec = {"konto": acc["name"], "webbplats": sname, "art_nr": art, "gammalt": "", "nytt": "", "status": ""}
+            if owner[0] != sid:
+                rec.update(nytt=tmpl.replace("{date}", d or ""), status=f"samma fält som {owner[1]} ({lang_of[sid]})")
+                out.append(rec)
+                print(f"  {sname:<22} {art:<16} {rec['status']}")
+                continue
+            try:
+                if "{date}" in tmpl and not d:
+                    raise E37Error("datum saknas för artikeln, och texten innehåller {date}")
+                new = tmpl.replace("{date}", d or "")
+                rec["nytt"] = new
+                if a.apply:
+                    old, now = s.set_delivery_text(art, new, sid)
+                    rec["gammalt"] = old
+                    rec["status"] = "oförändrad" if old == new else ("ändrad" if now == new else f"FEL: sparat värde är {now!r}")
+                else:
+                    _, _, old = s.delivery_text(art)
+                    rec["gammalt"] = old
+                    rec["status"] = "oförändrad" if old == new else "skulle ändras"
+            except E37Error as e:
+                rec["status"] = f"FEL: {e}"
+                if "ANDRA FÄLT" in str(e) or "fel webbplats" in str(e):
+                    stop = e
+            out.append(rec)
+            print(f"  {sname:<22} {art:<16} {rec['status']:<14} {rec['gammalt']!r} -> {rec['nytt']!r}")
+            if stop:
+                break
+    path = _write_log(log, out)
+    errors = [r for r in out if r["status"].startswith("FEL")]
+    print(f"\nKlart. {len(out) - len(errors)} OK, {len(errors)} fel. Logg: {path}", file=sys.stderr)
+    if stop:
+        print(f"STOPPADE: {stop}", file=sys.stderr)
+    return 1 if errors else 0
+
+
 # ---- shop --------------------------------------------------------------------
 
 def _product_line(p):
@@ -662,6 +796,51 @@ def _add_report_commands(sub):
     s.set_defaults(fn=cmd_report_get)
 
 
+def _add_delivery_commands(sub):
+    def common(s):
+        s.add_argument("articles", nargs="*", metavar="ART", help="exact variant article numbers")
+        s.add_argument("--file", help="Excel (.xlsx) or CSV with column art-nr (and datum for set)")
+        s.add_argument("--site", action="append", metavar="ID|NAME", help="site(s) to work on, repeatable")
+        s.add_argument("--limit", type=int, metavar="N", help="only the first N articles")
+        _account_flag(s)
+
+    s = _parser(sub, "get", "read the out-of-stock delivery text per variant and site",
+                "Read 'Leverans-/beställningstid, om slut i lager' (Lager, Alt. 2, free text) for\n"
+                "variants, on one or more sites. The field is per site language. Read-only.\n"
+                "E37's own exports do not contain this field.",
+                "examples:\n  e37 delivery-text get 1526680073011 --site 'Addnature SE' --account vartex-outdoor\n"
+                "  e37 delivery-text get --file lista.xlsx --site 'Addnature SE' --site 'Addnature NO' --csv nu.csv")
+    common(s)
+    s.add_argument("--csv", metavar="FILE", help="also write the result as a ; separated CSV")
+    _json_flag(s)
+    s.set_defaults(fn=cmd_delivery_get)
+
+    s = _parser(sub, "set", "set the out-of-stock delivery text (dry run unless --apply)",
+                "Set 'Leverans-/beställningstid, om slut i lager' for variants on one or more\n"
+                "sites. WRITES TO E37, so:\n"
+                "  - without --apply it only reads and shows what would change\n"
+                "  - after each save the variant is reopened and every field compared; the\n"
+                "    text must be the new one and nothing else may have changed, or the run stops\n"
+                "  - one article failing is logged and the run goes on\n"
+                "  - a ; separated log with old and new value is always written\n"
+                "The field belongs to the site's LANGUAGE: all Swedish sites share one text. Two\n"
+                "sites of one language with different texts are refused; with the same text the\n"
+                "field is written once.\n"
+                "Text: --text for all sites, --site-text SITE=TEXT per site; {date} is replaced\n"
+                "by the date from the file's datum column.\n"
+                "Run with --apply --limit 2 first on new input.",
+                "examples:\n  e37 delivery-text set --file lista.xlsx --site 'Addnature SE' --text 'Förväntas åter i lager: {date}'\n"
+                "  e37 delivery-text set --file lista.xlsx --site 'Addnature SE' --site 'Addnature NO' \\\n"
+                "      --site-text 'Addnature SE=Förväntas åter i lager: {date}' \\\n"
+                "      --site-text 'Addnature NO=Forventes tilbake på lager: {date}' --apply --limit 2")
+    common(s)
+    s.add_argument("--text", help="text for every site; {date} = the row's date; --text '' empties the field")
+    s.add_argument("--site-text", action="append", metavar="SITE=TEXT", help="text for one site, repeatable")
+    s.add_argument("--apply", action="store_true", help="really save; without it nothing is written")
+    s.add_argument("--log", metavar="FILE", help="log path (default e37-leveranstid-<time>.csv here)")
+    s.set_defaults(fn=cmd_delivery_set)
+
+
 def _add_skill_commands(sub):
     s = _parser(sub, "install", "install the Claude skill that teaches Claude to use e37",
                 "Write SKILL.md to ~/.claude/skills/e37/, where Claude Code (and Code in the\n"
@@ -683,10 +862,12 @@ def main(argv=None):
     p = argparse.ArgumentParser(
         prog="e37",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Read orders and products out of the E37 webshop platform. Nothing here writes to E37.\n\n"
+        description="Orders, reports and products out of the E37 webshop platform. Only `delivery-text set\n"
+                    "--apply` writes to E37.\n\n"
                     "  shop     products in a shop, no login needed\n"
                     "  order    orders: the API with a key, otherwise your own E37 Admin login\n"
                     "  report   any E37 Admin report as JSON, via your own login\n"
+                    "  delivery-text  out-of-stock delivery text per variant (the only command that writes)\n"
                     "  sites    the shops your login can see\n"
                     "  account  your E37 instances, stored in the OS keychain\n"
                     "  skill    teach Claude how to use this tool\n"
@@ -696,7 +877,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -706,6 +887,9 @@ def main(argv=None):
 
     r = _parser(sub, "report", "any E37 Admin report as JSON: list, show, get (web login)")
     _add_report_commands(r.add_subparsers(dest="report_cmd", required=True))
+
+    dt = _parser(sub, "delivery-text", "out-of-stock delivery text per variant and site: get, set")
+    _add_delivery_commands(dt.add_subparsers(dest="delivery_cmd", required=True))
 
     s = _parser(sub, "sites", "the sites (shops) an instance's web login can see",
                 epilog="example:\n  e37 sites --account vartex-outdoor --json")

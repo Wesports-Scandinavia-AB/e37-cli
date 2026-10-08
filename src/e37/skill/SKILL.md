@@ -1,6 +1,6 @@
 ---
 name: e37
-description: Läs ordrar, rapporter och produkter ur webbshopsplattformen E37 med e37-cli. Använd när användaren frågar om ordrar, orderflöde, försäljning per artikel eller varumärke, moms, återbetalningar, lager, presentkort, en orders status, eller om produkter, priser, lagerstatus och varumärken i en E37-butik (t.ex. Addnature, Outdoorexperten, Cykloteket, Bikester, Rull), eller vill lägga till eller ändra sitt E37-konto. Exempel "vilka ordrar kom in i förmiddags", "vilka varumärken sålde mest på Addnature i veckan", "vad har order 1189437 för status", "har Addnature regnjackor från Patagonia i lager", "lägg till mitt E37-konto".
+description: Läs ordrar, rapporter och produkter ur webbshopsplattformen E37 med e37-cli. Använd när användaren frågar om ordrar, orderflöde, försäljning per artikel eller varumärke, moms, återbetalningar, lager, presentkort, en orders status, eller om produkter, priser, lagerstatus och varumärken i en E37-butik (t.ex. Addnature, Outdoorexperten, Cykloteket, Bikester, Rull), vill läsa eller sätta leveranstiden som visas när en vara är slut i lager, eller vill lägga till eller ändra sitt E37-konto. Exempel "vilka ordrar kom in i förmiddags", "vilka varumärken sålde mest på Addnature i veckan", "vad har order 1189437 för status", "har Addnature regnjackor från Patagonia i lager", "lägg till mitt E37-konto".
 ---
 
 # e37: ordrar, rapporter och produkter ur E37
@@ -132,6 +132,39 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
   standard, slå på med `--set ID=true`.
 - Svaret är `{"rows": [...], "columns": [...]}`.
 - Långa perioder och "alla webbplatser" kan bli stora. Börja med en kort period.
+
+## Leveranstid vid slut i lager (det enda som skriver)
+
+Fältet "Leverans-/beställningstid, om slut i lager" (Lager, Alt. 2, fritext) per
+variant. Det syns för kunden när varan är slut. Det finns inte i E37:s exporter.
+
+```
+python -m e37 delivery-text get ART [ART ...] --site 'Addnature SE' --account NAMN [--json]
+python -m e37 delivery-text get --file lista.xlsx --site 'Addnature SE' --csv nuvarande.csv
+python -m e37 delivery-text set --file lista.xlsx --site 'Addnature SE' --text 'Förväntas åter i lager: {date}' --account NAMN
+python -m e37 delivery-text set ... --apply --limit 2
+python -m e37 delivery-text set ... --apply
+```
+
+- Filen är Excel eller CSV med kolumnerna `art-nr` och `datum`. `{date}` i texten
+  byts mot radens datum. Olika text per webbplats: `--site-text 'Addnature NO=Forventes tilbake på lager: {date}'`.
+- **Texten hör till webbplatsens språk, inte webbplatsen.** Alla svenska webbplatser
+  delar samma fält. Sätter du den för Addnature SE ändras den också för OutdoorExperten SE.
+  Säg det till personen innan du skriver. Två webbplatser med samma språk och olika
+  text nekas.
+- **Så här skriver du, i den här ordningen:**
+  1. Kör `set` utan `--apply`. Det är en torrkörning som bara läser och visar vad som
+     skulle ändras.
+  2. Visa personen sammanfattningen: hur många artiklar, vilka webbplatser och språk,
+     och exempel på ny text. Fråga om du får spara.
+  3. Kör `--apply --limit 2` och visa resultatet.
+  4. Kör `--apply` för resten först när personen sagt ja igen.
+- Efter varje sparning öppnar verktyget varianten igen. Texten ska vara den nya, och
+  inget annat fält får ha ändrats. Står det `ANDRA FÄLT ÄNDRADES` eller `STOPPADE`:
+  sluta, kör inget mer och be personen kontrollera varianten i E37 Admin.
+- Varje körning skriver en logg (`e37-leveranstid-….csv`) med gammalt och nytt värde.
+  Säg var den ligger. Den behövs för att kunna återställa.
+- Tömma fältet: `--text ''`.
 
 ## Lägga till eller ändra ett konto
 

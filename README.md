@@ -6,6 +6,9 @@ Addnature, Outdoorexperten med flera), från terminalen, från ett skript eller 
 - `e37 order` och `e37 report`: E37 Admin med din egen inloggning. Orderflödet och alla
   rapporter (försäljning per artikel och varumärke, moms, lager, ...) som JSON. Ingen
   API-nyckel behövs; finns en används den där E37:s API kan svara.
+- `e37 delivery-text`: läs och sätt leveranstiden som visas när en variant är slut i
+  lager, från Excel eller CSV. Det enda som skriver till E37: torrkörning som standard,
+  och varje sparning kontrolleras mot alla fält i varianten.
 - `e37 shop`: butikens publika produktsök. Ingen inloggning.
 
 ## Via Claude
@@ -54,6 +57,10 @@ e37 order show ID        en order i sin helhet: kund, betalning, leverans, rader
 e37 order status ID      orderstatus, betalstatus och Garp-synk
 
 e37 sites                webbplatserna din inloggning ser
+
+e37 delivery-text get ART --site 'Addnature SE'      leveranstid vid slut i lager
+e37 delivery-text set --file lista.xlsx --site 'Addnature SE' --text 'Förväntas åter i lager: {date}'
+                         torrkörning; --apply sparar, --limit 2 först
 e37 report list          rapporterna i E37 Admin
 e37 report show 21       en rapports inställningar och tillåtna värden
 e37 report get 21 --from '2026-10-01 00:00' --to '2026-10-07 23:59' --site 'Addnature SE'

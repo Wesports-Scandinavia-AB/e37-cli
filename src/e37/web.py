@@ -62,7 +62,7 @@ class Session:
 
     def _open(self, path, data=None):
         url = path if path.startswith("http") else self.base + path.lstrip("/")
-        body = parse.urlencode(data).encode() if data is not None else None
+        body = parse.urlencode(data, doseq=True).encode() if data is not None else None
         req = request.Request(url, data=body, headers={"User-Agent": USER_AGENT})
         try:
             return self._op.open(req, timeout=self.timeout)
@@ -177,6 +177,168 @@ class Session:
         data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": f"viewOrder?{int(order_id)}"})
         _, html = self._page(ORDERS_PAGE, data)
         return _parse_order(html, int(order_id))
+
+    # ---- sites ---------------------------------------------------------------
+
+    def switch_site(self, site_id):
+        """Make one site current for this session. Site-bound fields (texts per
+        language) are read and written for the current site, so callers check
+        current_site() again before every write rather than trusting this."""
+        _, html = self._page(ARTICLES_PAGE)
+        if _current_site(html) == str(site_id):
+            self._articles = html
+            return
+        data = _form_full(html)
+        data.update({"ctl00$ddlSitePicker": str(site_id), "__EVENTTARGET": "ctl00$ddlSitePicker", "__EVENTARGUMENT": ""})
+        _, html = self._page(ARTICLES_PAGE, data)
+        if _current_site(html) != str(site_id):
+            raise E37Error(f"Kunde inte byta till webbplats {site_id} (står på {_current_site(html)}).")
+        self._articles = html
+
+    def current_site(self):
+        _, html = self._page(ARTICLES_PAGE)
+        self._articles = html
+        return _current_site(html)
+
+    # ---- article variants ----------------------------------------------------
+
+    def find_variant(self, art_nr):
+        """The variant id for an exact article number. Exactly one match or an error."""
+        _, html = self._page(ARTICLES_PAGE)
+        data = _form_full(html)
+        data.update({"ctl00$cph1$settingstabs$tabSearch$txtSearch": art_nr,
+                     "ctl00$cph1$settingstabs$tabSearch$btnArticleSearch.x": "5",
+                     "ctl00$cph1$settingstabs$tabSearch$btnArticleSearch.y": "5"})
+        _, html = self._page(ARTICLES_PAGE, data)
+        # The search matches substrings; only an exact article number counts.
+        hits = re.findall(r'<tr[^>]*data-article-variant-id="(\d+)"[^>]*data-article-variant-nr="%s"' % re.escape(art_nr), html)
+        if len(set(hits)) != 1:
+            raise E37Error(f"hittade {len(set(hits))} varianter med exakt artikelnummer {art_nr}")
+        self._articles = html
+        return hits[0]
+
+    def _open_variant(self, variant_id):
+        """The articles page with one variant's edit window rendered in it."""
+        data = _form_full(self._articles)
+        data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": f"a_id={int(variant_id)};"})
+        _, html = self._page(ARTICLES_PAGE, data)
+        if "Redigera artikelvariant" not in html:
+            raise E37Error(f"variant {variant_id} gick inte att öppna")
+        return html
+
+    def delivery_text(self, art_nr):
+        """(site_id, language, text) of 'Leverans-/beställningstid, om slut i lager'
+        for one variant on the current site."""
+        html = self._open_variant(self.find_variant(art_nr))
+        name, lang, value = _delivery_field(html)
+        return _current_site(html), lang, value
+
+    def set_delivery_text(self, art_nr, text, site_id):
+        """Write the out-of-stock delivery text for one variant on one site, then prove it.
+
+        A save in E37 Admin posts the whole form. So the form is serialised the way
+        a browser would, only the one field is changed, and afterwards the variant
+        is opened again and EVERY field compared with before: the target must hold
+        the new text and nothing else may have moved. Anything else is an error
+        the caller must stop on. Returns (old, new_as_read_back).
+        """
+        if _current_site(self._articles) != str(site_id):
+            self.switch_site(site_id)
+        variant_id = self.find_variant(art_nr)
+        html = self._open_variant(variant_id)
+        if _current_site(html) != str(site_id):
+            raise E37Error(f"fel webbplats ({_current_site(html)}) inför skrivning, avbryter")
+        name, lang, old = _delivery_field(html)
+        before = _form_full(html)
+        if old == text:
+            self._articles = html
+            return old, old
+        data = dict(before)
+        data[name] = text
+        # What the dialog's own change handler does when a field is edited.
+        for k in data:
+            if k.startswith(_VARIANT_PREFIX) and k.endswith("$PopupTab3$changesMadeHiddenField"):
+                data[k] = "1"
+        data[_VARIANT_PREFIX + "$btnSave.x"] = "5"
+        data[_VARIANT_PREFIX + "$btnSave.y"] = "5"
+        _, saved = self._page(ARTICLES_PAGE, data)
+        self._articles = saved
+        if "Redigera artikelvariant" in saved and re.search(r'class="[^"]*(?:error|validator)[^"]*"[^>]*>[^<]{3,}', saved):
+            raise E37Error("E37 visade ett valideringsfel vid sparning")
+        # Proof: reopen and compare everything.
+        self.find_variant(art_nr)
+        after_html = self._open_variant(variant_id)
+        after = _form_full(after_html)
+        _, _, now = _delivery_field(after_html)
+        changed = sorted(k for k in set(before) | set(after)
+                         if k.startswith(_VARIANT_PREFIX) and k != name and not k.endswith("changesMadeHiddenField")
+                         and not k.endswith("$hidden" + lang) and before.get(k) != after.get(k))
+        if changed:
+            raise E37Error("ANDRA FÄLT ÄNDRADES vid sparning: " + ", ".join(c.split("$")[-1] for c in changed[:8])
+                           + ". Stanna och kontrollera varianten i E37 Admin.")
+        return old, now
+
+
+ARTICLES_PAGE = "workspace/workwith/articles/list.aspx"
+_VARIANT_PREFIX = "ctl00$cph1$mod1$pnl$usrCtrl"
+
+
+def _current_site(html):
+    m = re.search(r'<select[^>]*ddlSitePicker[^>]*>(.*?)</select>', html, re.S)
+    sel = re.search(r'<option[^>]*selected="selected"[^>]*value="([^"]*)"', m.group(1)) if m else None
+    sel = sel or (re.search(r'<option[^>]*value="([^"]*)"[^>]*selected', m.group(1)) if m else None)
+    return sel.group(1) if sel else None
+
+
+def _delivery_field(html):
+    """(post name, language, value) of the out-of-stock delivery text — not the
+    in-stock one, not the hidden mirror."""
+    for m in re.finditer(r'<input[^>]*name="([^"]*\$tbDeliveryTimeText\$(\w+))"[^>]*>', html):
+        lang = m.group(2)
+        if lang.startswith("hidden"):
+            continue
+        v = re.search(r'value="([^"]*)"', m.group(0))
+        return m.group(1), lang, unescape(v.group(1)) if v else ""
+    raise E37Error("hittade inte fältet 'Leverans-/beställningstid, om slut i lager'")
+
+
+def _form_full(html):
+    """The whole form as a browser would post it, so a save does not blank fields.
+
+    Unlike _form this keeps textareas, every selected option of a multi-select,
+    the first option of a single select without a selection, and drops disabled
+    controls (browsers do not post them). Buttons are never included; the caller
+    adds the one being "clicked".
+    """
+    out = {}
+    for m in re.finditer(r"<input\b([^>]*)>", html):
+        attrs = m.group(1)
+        a = dict(re.findall(r'([\w-]+)="([^"]*)"', attrs))
+        kind, name = a.get("type", "text").lower(), a.get("name")
+        if not name or kind in ("image", "submit", "button", "file", "reset") or re.search(r'\bdisabled\b', attrs):
+            continue
+        if kind in ("checkbox", "radio") and not re.search(r'\bchecked\b', attrs):
+            continue
+        out[name] = unescape(a.get("value", "on" if kind in ("checkbox", "radio") else ""))
+    for m in re.finditer(r"<textarea\b([^>]*)>(.*?)</textarea>", html, re.S):
+        name = re.search(r'name="([^"]*)"', m.group(1))
+        if name and not re.search(r'\bdisabled\b', m.group(1)):
+            body = m.group(2)
+            out[name.group(1)] = unescape(body[1:] if body.startswith("\n") else body)
+    for m in re.finditer(r"<select\b([^>]*)>(.*?)</select>", html, re.S):
+        name = re.search(r'name="([^"]*)"', m.group(1))
+        if not name or re.search(r'\bdisabled\b', m.group(1)):
+            continue
+        opts = re.findall(r"<option\b([^>]*)>", m.group(2))
+        chosen = [re.search(r'value="([^"]*)"', o) for o in opts if re.search(r'\bselected\b', o)]
+        chosen = [c.group(1) for c in chosen if c]
+        if not chosen and opts and "multiple" not in m.group(1):
+            first = re.search(r'value="([^"]*)"', opts[0])
+            chosen = [first.group(1)] if first else []
+        if chosen:
+            # urlencode with doseq needs a list for multi-selects; one value stays a str.
+            out[name.group(1)] = [unescape(c) for c in chosen] if len(chosen) > 1 else unescape(chosen[0])
+    return out
 
 
 ORDERS_PAGE = "workspace/workwith/orders.aspx"
