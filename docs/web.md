@@ -95,6 +95,16 @@ Provat på matrisen "Viktpaket" (3 värden, 2 artiklar): omsorterad, kontrollera
 - Ordningen gäller ett språk, det som webbplatsen har.
 - Storlek har över 3 000 värden. Att läsa dem tar några sekunder.
 
+### Kampanjsidor: versioner och widgetar (kartlagt 2026-10-09, läser bara)
+
+Kartlagt på sida 1328 ("414") på OutdoorExperten. Inget av det här är byggt än.
+
+- **En kampanjsida är en sida med tidsstyrda versioner**, en per kampanj: "13/10 - Pre Season Deals" 2026-10-13 00:00 – 2026-11-02 23:59, "9-12/10 - Helgklipp Primus, Silva, Nnormal" och så vidare bakåt. Sidlistan visar den aktiva i ikonens `title` ("Tidsstyrd version: …").
+- Versionerna står i siddialogens innehållsflik med `EditVersion('id=N;')`, `MakePrimaryVersion('N;titel')` och `DeleteVersion(…)`. Alla tre är `doPostBackAsync('ctl00$cph1$ModalPopup1$pnl$usrCtrl', 'editV_|primaryV_|deleteV_' + …)`. Öppna bara `editV_`.
+- En version har titel i admin, tidsintervall (två `datePickerInput`) och widgetar. Widgetarna ritas med `InsertWidget(id, titel, ikon, färg, typ, …, 'javascript:EditWidgetSettings("id=N;siteid=S;")', kolumner, …)`, typen är ofta "Splash".
+- **En widget öppnas från siddialogen**, med `edit_id=N;siteid=S;` till `…$pnl$usrCtrl`. Öppnas den när versionsdialogen redan är öppen kraschar E37 med "An item with the same key has already been added" (`ModalPopup.AddUserControlParameters`). Inget sparas av det, men öppna versionen och widgeten i varsin vända.
+- Widgetdialogen har flikarna Allmänna inställningar (Aktiverad, Rubrik, Rubriktyp, Höjd), Widgetinställningar (fält som `str_423` = knapptext och länk, `ddl_337` justering, `colorpicker_424`, `int_342`) och CSS. Widgetinställningarnas etiketter och bildfälten tolkas inte än.
+
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
