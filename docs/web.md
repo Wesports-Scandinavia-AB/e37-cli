@@ -90,7 +90,7 @@ Provat på matrisen "Viktpaket" (3 värden, 2 artiklar): omsorterad, kontrollera
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
-
+- Att skapa en kampanj eller rabattkod. "Kopiera" i listan är `openListItem('copy', 'ID;')` respektive `CopyDiscountCode('id=ID;text=KOD')`, alltså `copy|…` till `__Page`. Om det skapar posten direkt eller öppnar en ifylld dialog är inte provat.
 - Innehållet på en sida och i en widgethållare (widgetar, texter och bilder per språk). Dialogen visar bara sidans inställningar och layout.
 - Texter för andra språk än webbplatsens. Språkflikarna (`LanguageTabContainer`) visar ett språk åt gången.
 
