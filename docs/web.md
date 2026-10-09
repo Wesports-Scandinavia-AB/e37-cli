@@ -46,6 +46,17 @@ Kört med `urllib` och en cookie-jar, utan webbläsare, mot en riktig instans me
 - Sidorna är stora: kampanjlistan är ca 0,6 MB och en öppnad kampanj ca 7 MB, eftersom alla varugrupper och varumärken ligger som options. Att öppna en post tar några sekunder.
 - Taggar och sidor gäller den valda webbplatsen (`site=` i argumentet). `--site` byter först.
 
+### Spara en post (`e37 change`, verifierat 2026-10-09)
+
+Provat på en tagg utan artiklar och en inaktiv kampanj: satt, kontrollerat och återställt.
+
+- Hela formuläret serialiseras som en webbläsare gör (`_form_full`), bara de ändrade fälten byts, `…$PopupTabN$changesMadeHiddenField=1` sätts för fliken där fältet står, och bildknappen `…$pnl$usrCtrl$btnSave` skickas med `.x`/`.y`. En vanlig synkron postback räcker.
+- **`…$usrCtrl$isPostback` måste vara `1`.** Sidans eget skript sätter det när dialogen laddas. Står det kvar på `0` laddar servern om posten från databasen innan den sparar, och ändringen försvinner utan felmeddelande. Dialogen stängs ändå, så en stängd dialog bevisar ingenting.
+- Fält med rik text (TinyMCE, namn som slutar på `$sv` osv.) har ett syskon `…$isDirty` som webbläsaren sätter till språkkoden. Det sätts likadant.
+- Språkfälten (`languageTextBox`, flaggor ovanför) gäller det språk som visas, och det följer webbplatsen. Att byta språk i dialogen är en egen postback (`…LanguageTabContainerN`, argument språkkoden). `e37 change` byter i stället webbplats med `--site`.
+- Låsta fält (`disabled`), till exempel valutan på en rabattkod, nekas med ett eget fel.
+- Efter sparning öppnas posten igen och alla fält jämförs. Det är enda beviset.
+
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.

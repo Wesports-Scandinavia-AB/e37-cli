@@ -7,12 +7,13 @@ None of these are in the REST API. Each register is one admin page with a list
 (a table or a tree), and each item opens in a modal edit dialog through an async
 postback to `__Page`, the same way the variant dialog does (see docs/web.md).
 
-READ ONLY, AND CAREFUL ABOUT IT. The postback that opens an item is the same one
+CAREFUL ABOUT WHAT IS POSTED. The postback that opens an item is the same one
 that deletes or copies it; only the argument differs (`open|…` against `del|…`,
 `delete|…`, `copy|…`). So the argument is never built from user input: it is
 taken from the item's own link on the list page, and only for the link functions
-in _OPENERS, whose JS is known to open the dialog and nothing else. Nothing here
-presses a button in a dialog, and opening one does not save it.
+in _OPENERS, whose JS is known to open the dialog and nothing else. Opening a
+dialog does not save it. The only button pressed is Save, in change(), which
+proves every save by reopening the item and comparing every field.
 """
 
 import re
@@ -20,7 +21,7 @@ from html import unescape
 from html.parser import HTMLParser
 
 from . import E37Error
-from .web import _form_full
+from .web import _current_site as web_current_site, _form_full
 
 # kind: (page, Swedish title as in E37 Admin's menu)
 REGISTERS = {
@@ -65,7 +66,101 @@ def items(session, kind):
 def item(session, kind, ref):
     """One item's edit dialog as {kind, id, name, title, fields, lists}. ref is the id
     from items() or an exact name. fields are {tab, label, value}; lists are the
-    ordered sub-lists a dialog has (addition articles, matrix values), {tab, items}."""
+    ordered sub-lists a dialog has (addition articles, a tag's articles), {tab, label, items}."""
+    _, it, opened = _open(session, kind, ref)
+    dialog = _dialog(opened)
+    dialog.update({"kind": kind, "id": it["id"], "name": it["name"]})
+    return dialog
+
+
+def change(session, kind, ref, sets, apply=False):
+    """Change fields of one item the way a person does in its edit dialog.
+
+    sets is [(key, value)]. key is a label as `e37 view` shows it, a checkbox's own
+    label, or 'Tab/Label' when the label is on two tabs. value: text as is; a list by
+    the option's text; a checkbox ja/nej; a radio group by the chosen option's label.
+
+    Without apply only the dialog is opened, and the planned changes returned.
+    With apply the whole form is posted as a browser would, with only these fields
+    changed, the item is opened again and EVERY field compared with before: the
+    targets must hold the new values and nothing else may have moved. Anything else
+    raises E37Error, which the caller must stop on.
+
+    Returns {"id", "name", "changes": [{"label", "old", "new"}], "saved"}.
+    """
+    page, it, html = _open(session, kind, ref)
+    controls, lists = _controls(_box(html))
+    site = web_current_site(html)
+    plan = []
+    for key, value in sets:
+        group = _resolve(controls, key)
+        new_form, new_shown = _convert(group, value, key)
+        old_shown = _shown(group)
+        if _form_value(group) != new_form:
+            plan.append({"label": group[0]["label"] if group[0]["kind"] != "checkbox" or not group[0]["own"]
+                         else group[0]["own"], "old": old_shown, "new": new_shown,
+                         "_group": group, "_form": new_form})
+    result = {"id": it["id"], "name": it["name"],
+              "changes": [{k: v for k, v in p.items() if not k.startswith("_")} for p in plan], "saved": False}
+    if not apply or not plan:
+        return result
+
+    data = _form_full(html)
+    # The page's own script sets this to 1 when the dialog loads. Left at 0 the server
+    # reloads the item from the database before saving, and the change is silently lost.
+    for k in data:
+        if k.endswith("$usrCtrl$isPostback"):
+            data[k] = "1"
+    for p in plan:
+        g = p["_group"]
+        name = g[0]["name"]
+        if g[0]["kind"] == "checkbox":
+            if p["_form"]:
+                data[name] = "on"
+            else:
+                data.pop(name, None)
+        else:
+            data[name] = p["_form"]
+        changed_flag = f"{name.rsplit('$' + g[0]['tabkey'] + '$', 1)[0]}${g[0]['tabkey']}$changesMadeHiddenField"
+        if changed_flag in data:
+            data[changed_flag] = "1"
+        if g[0]["lang"]:
+            dirty = name[: -len(g[0]["lang"])] + "isDirty"
+            if dirty in data:  # rich-text fields tell the server which languages were edited
+                data[dirty] = g[0]["lang"]
+    save = next((k for k in re.findall(r'name="([^"]*\$pnl\$usrCtrl\$btnSave)"', html)), None)
+    if not save:
+        raise E37Error("hittade ingen Spara-knapp i dialogen, avbryter")
+    if web_current_site(html) != site:
+        raise E37Error("fel webbplats inför skrivning, avbryter")
+    data[save + ".x"], data[save + ".y"] = "5", "5"
+    _, saved = session._page(page, data)
+    result["saved"] = True
+    message = _message(saved)
+
+    _, _, again = _open(session, kind, it["id"])
+    if web_current_site(again) != site:
+        raise E37Error("webbplatsen byttes under sparningen; kontrollera posten i E37 Admin")
+    after, after_lists = _controls(_box(again))
+    before = {c["name"] + ("=" + c["value"] if c["kind"] == "radio" else ""): c for c in controls}
+    now = {c["name"] + ("=" + c["value"] if c["kind"] == "radio" else ""): c for c in after}
+    targets = {c["name"] for p in plan for c in p["_group"]}
+    moved = sorted(c["label"] for k, c in before.items()
+                   if c["name"] not in targets and (k not in now or _form_value([now[k]]) != _form_value([c])))
+    moved += sorted(c["label"] for k, c in now.items() if k not in before and c["name"] not in targets)
+    if moved or after_lists != lists:
+        raise E37Error("ANDRA FÄLT ÄNDRADES vid sparning: " + ", ".join((moved or ["underlistor"])[:8])
+                       + ". Stanna och kontrollera posten i E37 Admin." + (f" E37 sa: {message}" if message else ""))
+    for p in plan:
+        group = [c for c in after if c["name"] == p["_group"][0]["name"]]
+        if not group or _form_value(group) != p["_form"]:
+            raise E37Error(f"{p['label']}: sparat värde är {_shown(group)!r}, inte {p['new']!r}."
+                           + (f" E37 sa: {message}" if message else ""))
+    return result
+
+
+def _open(session, kind, ref):
+    """(page, list item, html with the item's dialog open)."""
     page = _page(kind)
     _, html = session._page(page)
     found = _list(html)
@@ -78,11 +173,90 @@ def item(session, kind, ref):
     data = _form_full(html)
     data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": it["_arg"]})
     _, opened = session._page(page, data)
-    dialog = _dialog(opened)
-    if dialog is None:
+    if _box(opened) is None:
         raise E37Error(f"{REGISTERS[kind][1]}: posten {it['id']} gick inte att öppna")
-    dialog.update({"kind": kind, "id": it["id"], "name": it["name"]})
-    return dialog
+    return page, it, opened
+
+
+def _resolve(controls, key):
+    """The control (or radio group) a key names; exactly one, or an error with the candidates."""
+    locked = [c for c in controls if c["disabled"] and key.strip().lower() in (c["label"].lower(), (c["own"] or "").lower())]
+    if locked:
+        raise E37Error(f"{key!r} är låst i E37 Admin för den här posten och går inte att ändra")
+    usable = [c for c in controls if not c["disabled"]]
+    tab, label = None, key.strip()
+    for t in {c["tab"] for c in usable}:
+        if t and label.lower().startswith(t.lower() + "/"):
+            tab, label = t, label[len(t) + 1:].strip()
+    if tab:
+        usable = [c for c in usable if c["tab"] == tab]
+    k = label.lower()
+    hits = ([c for c in usable if c["kind"] == "checkbox" and (c["own"] or "").lower() == k]
+            or [c for c in usable if c["label"].lower() == k]
+            or [c for c in usable if c["name"].split("$")[-1].lower() == k])
+    names = {c["name"] for c in hits}
+    if len(names) != 1:
+        known = sorted({f"{c['tab']}/{c['own'] if c['kind'] == 'checkbox' and c['own'] else c['label']}"
+                        for c in (hits or usable)})
+        raise E37Error(f"{'Flera fält' if hits else 'Inget fält'} heter {key!r}. "
+                       + ("Ange flik: " if hits else "Fält: ") + "; ".join(known[:40]))
+    return [c for c in hits if c["name"] in names]
+
+
+def _form_value(group):
+    c = group[0]
+    if c["kind"] == "radio":
+        return next((r["value"] for r in group if r.get("checked")), None)
+    if c["kind"] == "select":
+        return c["value"][0] if c["value"] else ""
+    if c["kind"] == "multiselect":
+        return list(c["value"])
+    return c["value"]
+
+
+def _shown(group):
+    if not group:
+        return None
+    c = group[0]
+    if c["kind"] == "radio":
+        return next((r["own"] or r["value"] for r in group if r.get("checked")), "")
+    if c["kind"] == "checkbox":
+        return "ja" if c["value"] else "nej"
+    return c["shown"]
+
+
+_YES, _NO = {"ja", "j", "yes", "y", "true", "on", "1"}, {"nej", "n", "no", "false", "off", "0", ""}
+
+
+def _convert(group, value, key):
+    """(what the form posts, what the UI shows) for a value given by a person."""
+    c = group[0]
+    v = str(value)
+    if c["kind"] == "checkbox":
+        if v.strip().lower() in _YES:
+            return True, "ja"
+        if v.strip().lower() in _NO:
+            return False, "nej"
+        raise E37Error(f"{key}: en kryssruta tar ja eller nej, inte {v!r}")
+    if c["kind"] in ("select", "radio"):
+        opts = c["options"] if c["kind"] == "select" else [(r["value"], r["own"] or r["value"]) for r in group]
+        hit = [o for o in opts if o[1].strip().lower() == v.strip().lower()] or [o for o in opts if o[0] == v]
+        if len({o[0] for o in hit}) != 1:
+            near = [o[1] for o in opts if v.strip().lower() in o[1].lower()][:15]
+            raise E37Error(f"{key}: {'flera val' if hit else 'inget val'} heter {v!r}."
+                           + (f" Närmast: {'; '.join(near)}" if near else f" Val: {'; '.join(o[1] for o in opts[:30])}"))
+        return hit[0][0], hit[0][1]
+    if c["kind"] == "multiselect":
+        raise E37Error(f"{key}: flervalslistor går inte att ändra än")
+    return v, v
+
+
+def _message(html):
+    """Text E37 shows in its message box after a postback, if any."""
+    root = _dom(html)
+    texts = [n.text() for n in root.find_all(lambda n: "msgBoxCell2" in n.attrs.get("id", "")
+                                             or "msgBox_lbl" in n.attrs.get("id", ""))]
+    return " ".join(t for t in texts if t and t != "OK") or None
 
 
 def _page(kind):
@@ -146,19 +320,35 @@ def _list(html):
 
 # ---- edit dialog ---------------------------------------------------------------
 
-def _dialog(html):
+def _box(html):
     root = _dom(html)
-    box = root.find(lambda n: "modalpopup" in n.cls.split() and n.find(lambda x: "popupTabContent" in x.cls.split()))
+    return root.find(lambda n: "modalpopup" in n.cls.split() and n.find(lambda x: "popupTabContent" in x.cls.split()))
+
+
+def _dialog(html):
+    """The open dialog as {title, fields, lists} for reading, or None if none is open."""
+    box = _box(html)
     if box is None:
         return None
+    controls, lists = _controls(box)
     head = box.find(lambda n: "topContent" in n.cls.split())
+    fields = [{"tab": c["tab"], "label": c["label"], "value": c["shown"]}
+              for c in controls if c["shown"] not in (None, "")]
+    return {"title": head.text() if head else "", "fields": _merge(fields), "lists": lists}
+
+
+def _controls(box):
+    """Every field in a dialog, with what writing needs: the form name, its tab,
+    the label the UI shows (and a checkbox's or radio's own label), its kind,
+    its options, and what it shows now. Plus the dialog's ordered sub-lists."""
     tabnames = {}
     for li in box.find_all(lambda n: n.tag == "li" and "popupTabItem|" in n.attrs.get("id", "")):
         tabnames[li.attrs["id"].split("|")[-1]] = li.text()
     labels = {x.attrs["for"]: x.text() for x in box.find_all(lambda x: x.tag == "label" and x.attrs.get("for"))}
-    fields, lists = [], []
+    controls, lists = [], []
     for tab in box.find_all(lambda n: "popupTabContent" in n.cls.split()):
-        tname = tabnames.get(tab.attrs.get("id", "").split("_")[-1], "")
+        tabkey = tab.attrs.get("id", "").split("_")[-1]
+        tname = tabnames.get(tabkey, "")
         label = None
         rows = {id(r) for r in tab.find_all(_item_row)}
         for n in tab.walk():
@@ -182,20 +372,58 @@ def _dialog(html):
             elif n.tag in ("input", "select", "textarea") and n.attrs.get("name"):
                 if n.closest(lambda p: id(p) in rows or "dragAndDropItem" in p.cls.split()):
                     continue
-                value = _value(n, labels)
-                if value is None or value == "":
+                c = _control(n, labels)
+                if c is None or c["name"].endswith("$cbCheckAll"):
                     continue
-                name = n.attrs["name"]
-                if name.endswith("$cbCheckAll"):
-                    continue
-                lab = _row_label(n) or label or name.split("$")[-1]
-                if value.startswith(lab + ": "):
-                    value = value[len(lab) + 2:]
-                lang = name.split("$")[-1]
-                if re.fullmatch(r"[a-z]{2}", lang) and lang not in lab:
-                    lab = f"{lab} [{lang}]"
-                fields.append({"tab": tname, "label": lab, "value": value})
-    return {"title": head.text() if head else "", "fields": _merge(fields), "lists": lists}
+                lab = _row_label(n) or label or c["name"].split("$")[-1]
+                if c["own"] == lab:
+                    c["own"] = None
+                if c["lang"] and c["lang"] not in lab:
+                    lab = f"{lab} [{c['lang']}]"
+                c.update(tab=tname, tabkey=tabkey, label=lab)
+                if c["shown"] and c["own"] and c["kind"] == "checkbox":
+                    c["shown"] = f"{c['own']}: {c['shown']}"
+                controls.append(c)
+    return controls, lists
+
+
+def _control(n, labels):
+    """One form control, or None for the ones a person never sets (hidden, buttons)."""
+    t = (n.attrs.get("type") or "text").lower()
+    name = n.attrs["name"]
+    last = name.split("$")[-1]
+    c = {"name": name, "own": labels.get(n.attrs.get("id")), "options": [],
+         "lang": last if re.fullmatch(r"[a-z]{2}", last) else None,
+         "disabled": "disabled" in n.attrs}
+    if n.tag == "select":
+        opts = n.find_all(lambda o: o.tag == "option")
+        c["options"] = [(o.attrs.get("value", o.text()), o.text()) for o in opts]
+        sel = [o for o in opts if "selected" in o.attrs]
+        if not sel and opts and "multiple" not in n.attrs:
+            sel = opts[:1]
+        c.update(kind="multiselect" if "multiple" in n.attrs else "select",
+                 value=[o.attrs.get("value", o.text()) for o in sel],
+                 shown=", ".join(o.text() for o in sel))
+        return c
+    if n.tag == "textarea":
+        v = n.text(raw=True)
+        v = v[1:] if v.startswith("\n") else v
+        c.update(kind="textarea", value=v, shown=v.strip())
+        return c
+    if t in ("hidden", "submit", "image", "button", "file", "password", "reset"):
+        return None
+    if t == "checkbox":
+        on = "checked" in n.attrs
+        c.update(kind="checkbox", value=on, shown="ja" if on else "nej")
+        return c
+    if t == "radio":
+        on = "checked" in n.attrs
+        c.update(kind="radio", value=n.attrs.get("value", ""), checked=on,
+                 shown=(c["own"] or n.attrs.get("value", "")) if on else None)
+        return c
+    v = unescape(n.attrs.get("value", ""))
+    c.update(kind="text", value=v, shown=v)
+    return c
 
 
 def _title(n):
@@ -217,30 +445,6 @@ def _row_label(n):
 
 def _item_row(n):
     return n.tag == "tr" and n.find(lambda x: re.search(r"\$cbDelete_\d+$", x.attrs.get("name", ""))) is not None
-
-
-def _value(n, labels):
-    """What the field shows, or None for fields that are not shown."""
-    t = (n.attrs.get("type") or "").lower()
-    if n.tag == "select":
-        sel = [o.text() for o in n.find_all(lambda o: o.tag == "option" and "selected" in o.attrs)]
-        if not sel:
-            first = n.find(lambda o: o.tag == "option")
-            sel = [first.text()] if first and "multiple" not in n.attrs else []
-        return ", ".join(sel)
-    if n.tag == "textarea":
-        return n.text(raw=True).strip()
-    if t in ("hidden", "submit", "image", "button", "file", "password"):
-        return None
-    if t == "checkbox":
-        own = labels.get(n.attrs.get("id"))
-        return f"{own}: {'ja' if 'checked' in n.attrs else 'nej'}" if own else ("ja" if "checked" in n.attrs else "nej")
-    if t == "radio":
-        if "checked" not in n.attrs:
-            return None
-        return labels.get(n.attrs.get("id")) or n.attrs.get("value", "")
-    return unescape(n.attrs.get("value", ""))
-
 
 
 def _merge(fields):

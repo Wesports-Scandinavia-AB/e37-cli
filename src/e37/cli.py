@@ -313,6 +313,50 @@ def cmd_view(a):
     return 0
 
 
+def cmd_change(a):
+    """Dry run unless --apply. Every change is logged with the old value, so it can be undone."""
+    acc = admin.resolve_account(a.account)
+    s = web.Session(acc)
+    site = None
+    if a.site:
+        site = _resolve_site(s, a.site)
+        s.switch_site(site)
+    sets = []
+    for spec in a.set or []:
+        if "=" not in spec:
+            raise E37Error(f"--set väntar FÄLT=VÄRDE, fick {spec!r}")
+        key, value = spec.split("=", 1)
+        sets.append((key.strip(), value))
+    if not sets:
+        raise E37Error(f"Ange minst ett --set 'Fält=värde'. Fälten syns med: e37 view {a.kind} {a.ref}")
+    site_name = dict(s.sites()).get(site or s.current_site(), "")
+    log = a.log or f"e37-andring-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+    rows, error = [], None
+    try:
+        r = registers.change(s, a.kind, a.ref, sets, apply=a.apply)
+        for c in r["changes"]:
+            rows.append({"konto": acc["name"], "webbplats": site_name, "sort": a.kind, "id": r["id"],
+                         "namn": r["name"], "fält": c["label"], "gammalt": c["old"], "nytt": c["new"],
+                         "status": "ändrad" if r["saved"] else "skulle ändras"})
+    except E37Error as e:
+        error = e
+        rows.append({"konto": acc["name"], "webbplats": site_name, "sort": a.kind, "id": a.ref, "namn": "",
+                     "fält": "; ".join(k for k, _ in sets), "gammalt": "", "nytt": "", "status": f"FEL: {e}"})
+    path = _write_log(log, rows, ("konto", "webbplats", "sort", "id", "namn", "fält", "gammalt", "nytt", "status"))
+    if a.json:
+        _dump({"apply": a.apply, "log": str(path), "rows": rows})
+        return 1 if error else 0
+    print(f"{acc['name']}  {registers.REGISTERS[a.kind][1]} {a.ref}"
+          f"{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
+    for r in rows:
+        print(f"  {r['status']}" if r["status"].startswith("FEL")
+              else f"  {r['fält']}: {r['gammalt']!r} -> {r['nytt']!r}  ({r['status']})")
+    if not rows:
+        print("  Inget att ändra: fälten har redan de värdena.")
+    print(f"Logg: {path}", file=sys.stderr)
+    return 1 if error else 0
+
+
 def _web_order(acc, order_id):
     o = web.Session(acc).order(order_id)
     if o is None:
@@ -412,12 +456,12 @@ def _sites_from(s, a):
     return out
 
 
-def _write_log(path, rows):
+def _write_log(path, rows, fields=("konto", "webbplats", "art_nr", "gammalt", "nytt", "status")):
     import csv
     from pathlib import Path
     p = Path(path)
     with p.open("w", newline="", encoding="utf-8-sig") as f:   # utf-8-sig: Excel opens it right
-        w = csv.DictWriter(f, fieldnames=["konto", "webbplats", "art_nr", "gammalt", "nytt", "status"], delimiter=";")
+        w = csv.DictWriter(f, fieldnames=list(fields), delimiter=";")
         w.writeheader()
         w.writerows(rows)
     return p.resolve()
@@ -915,6 +959,33 @@ def _add_view_command(sub):
     _json_flag(s)
     s.set_defaults(fn=cmd_view)
 
+    s = _parser(sub, "change", "change fields of a campaign, discount code, tag, ... (dry run unless --apply)",
+                "Change fields of one item in an E37 Admin register, the way a person does in its\n"
+                "edit window. KIND and REF as for `e37 view`. Fields are named by the label `e37 view\n"
+                "KIND REF` shows (or a checkbox's own label, or 'Tab/Label' when a label is on two\n"
+                "tabs). Values: text as is; a list by the option's text; a checkbox ja/nej; a radio\n"
+                "group by the option's label.\n\n"
+                "Without --apply nothing is saved: the change is shown and logged as a dry run.\n"
+                "With --apply the whole form is posted as a browser would, the item is opened again\n"
+                "and EVERY field compared with before. Anything other than the named fields moving\n"
+                "is reported as ANDRA FÄLT ÄNDRADES; stop then and check the item in E37 Admin.\n"
+                "Each run writes a ; separated CSV log with the old and new values.\n\n"
+                "Texts are per language: they are read and written for the --site's language.\n"
+                "Lists inside an item (addition articles, a tag's articles, value order) and\n"
+                "multi-select lists cannot be changed with this command.",
+                "examples:\n  e37 change campaigns 134770 --set 'Titel i admin=FI kepsar' --account vartex-outdoor\n"
+                "  e37 change campaigns 134770 --set 'Aktiverad=ja' --set 'Till=2026-11-30 23:59' --apply\n"
+                "  e37 change tags 'ADD Black November' --set 'Rubrik=Black November' --site 'Addnature SE'")
+    s.add_argument("kind", choices=list(registers.REGISTERS), metavar="KIND", help="which register (see `e37 view -h`)")
+    s.add_argument("ref", metavar="REF", help="id or exact name of the item")
+    s.add_argument("--set", action="append", metavar="FIELD=VALUE", help="a field and its new value, repeatable")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language) to work on")
+    s.add_argument("--apply", action="store_true", help="really save; without it nothing is written")
+    s.add_argument("--log", metavar="FILE", help="log path (default e37-andring-<time>.csv here)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_change)
+
 
 def _add_skill_commands(sub):
     s = _parser(sub, "install", "install the Claude skill that teaches Claude to use e37",
@@ -937,13 +1008,14 @@ def main(argv=None):
     p = argparse.ArgumentParser(
         prog="e37",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Orders, reports and products out of the E37 webshop platform. Only `delivery-text set\n"
-                    "--apply` writes to E37.\n\n"
+        description="Orders, reports and products out of the E37 webshop platform. Only `change --apply`\n"
+                    "and `delivery-text set --apply` write to E37.\n\n"
                     "  shop     products in a shop, no login needed\n"
                     "  order    orders: the API with a key, otherwise your own E37 Admin login\n"
                     "  report   any E37 Admin report as JSON, via your own login\n"
                     "  view     campaigns, discount codes, tags, attributes, pages, addition sets, ... (read-only)\n"
-                    "  delivery-text  out-of-stock delivery text per variant (the only command that writes)\n"
+                    "  change   change fields of a campaign, discount code, tag, ... (dry run unless --apply)\n"
+                    "  delivery-text  out-of-stock delivery text per variant (dry run unless --apply)\n"
                     "  sites    the shops your login can see\n"
                     "  account  your E37 instances, stored in the OS keychain\n"
                     "  skill    teach Claude how to use this tool\n"

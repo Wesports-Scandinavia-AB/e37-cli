@@ -9,9 +9,13 @@ Addnature, Outdoorexperten med flera), från terminalen, från ett skript eller 
 - `e37 view`: kampanjer, rabattkoder, artikeltaggar, attribut, sidor, innehållselement,
   widgets, tillvalsuppsättningar och artikelmatriser i E37 Admin. Listor och enskilda
   poster med alla fält, och tillval som inte går att köpa. Läser bara.
+- `e37 change`: ändra fält i en kampanj, rabattkod, tagg och så vidare, via etiketten
+  som E37 Admin visar.
 - `e37 delivery-text`: läs och sätt leveranstiden som visas när en variant är slut i
-  lager, från Excel eller CSV. Det enda som skriver till E37: torrkörning som standard,
-  och varje sparning kontrolleras mot alla fält i varianten.
+  lager, från Excel eller CSV.
+
+Det som skriver till E37 gör en torrkörning som standard och sparar bara med `--apply`.
+Efter varje sparning öppnas posten igen och alla fält jämförs.
 - `e37 shop`: butikens publika produktsök. Ingen inloggning.
 
 ## Via Claude
@@ -72,6 +76,7 @@ e37 view campaigns       kampanjerna med status; --find TEXT filtrerar
 e37 view campaigns ID    en kampanj med alla fält (rabatt, datum, etikett, urval)
 e37 view addition-sets 3 --site 'Addnature SE'   tillvalen i ordning, med E37:s köpbar-varningar
                          övriga: discount-codes, tags, attributes, pages, content, widgets, matrices
+e37 change campaigns ID --set 'Till=2026-11-30 23:59'   torrkörning; --apply sparar
 
 e37 shop search ORD      produktsök, --top, --brand, --sort, --in-stock, --campaign
 e37 shop product NR      en produktmodell via modellnummer (--gtin för variant), --specs

@@ -135,9 +135,9 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
-Läser bara. Ändrar ingenting i E37. Det finns ännu inget kommando som skapar eller
-ändrar en kampanj, en rabattkod, en tagg eller ett tillval. Säg det om personen ber
-om en ändring, och erbjud dig att visa vad som gäller nu.
+`view` läser. `change` ändrar fält, se nedan. Att skapa nya poster och att ändra
+listor inuti en post (tillvalsartiklar, en taggs artiklar, storleksordning) går inte
+än. Säg det om personen ber om det.
 
 ```
 python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
@@ -167,7 +167,31 @@ python -m e37 view SORT ID_ELLER_NAMN --account NAMN [--site NAMN] --json
 - Att öppna en post tar några sekunder, och en kampanj är stor. Lista först och
   öppna bara de poster som frågan gäller.
 
-## Leveranstid vid slut i lager (det enda som skriver)
+### Ändra fält i en kampanj, rabattkod, tagg …
+
+```
+python -m e37 change SORT ID --set 'Fält=värde' [--set …] [--site NAMN] --account NAMN
+python -m e37 change SORT ID --set 'Fält=värde' … --apply
+```
+
+- Fältet heter som etiketten i `view SORT ID` (`Titel i admin`, `Procent`, `Till`,
+  `Aktiverad`). En kryssruta tar `ja`/`nej`, en lista valets text (`Typ av rabatt=Procent`).
+  Står samma etikett på två flikar: `'Flik/Etikett=värde'`.
+- Texter är per språk och följer webbplatsen. Ange `--site` för det språk som avses.
+- **Så här skriver du, i den här ordningen:**
+  1. Kör utan `--apply`. Det är en torrkörning som visar gammalt och nytt värde.
+  2. Visa personen ändringen och fråga om du får spara.
+  3. Kör samma kommando med `--apply`.
+- Efter sparning öppnas posten igen och alla fält jämförs. Står det `ANDRA FÄLT
+  ÄNDRADES` eller `sparat värde är …`: sluta och be personen kontrollera posten i E37 Admin.
+- Varje körning skriver en logg (`e37-andring-….csv`) med gammalt värde. Säg var den
+  ligger. Ångra genom att sätta tillbaka det gamla värdet med `change`.
+- `är låst i E37 Admin`: fältet går inte att ändra för den posten (till exempel valutan
+  på en rabattkod).
+- Aktivera inte en kampanj eller rabattkod och ändra inte rabatt eller datum på något
+  som pågår utan att personen uttryckligen sagt just det. Det syns i kassan direkt.
+
+## Leveranstid vid slut i lager
 
 Fältet "Leverans-/beställningstid, om slut i lager" (Lager, Alt. 2, fritext) per
 variant. Det syns för kunden när varan är slut. Det finns inte i E37:s exporter.
