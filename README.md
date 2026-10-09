@@ -39,8 +39,9 @@ Claude ser dem aldrig. Sedan kan du fråga Claude saker som "vilka ordrar kom in
 i förmiddags?". Claude kommer ihåg verktyget i nya samtal, eftersom installationen
 lägger en skill i `~/.claude/skills/e37/`.
 
-**Ny version:** säg "uppdatera e37" till Claude, eller kör `python -m e37 update`.
-Kontona ligger kvar.
+**Ny version:** Claude kollar själv första gången e37 används i en konversation
+(`python -m e37 update --check`) och uppdaterar när det finns en nyare. Du kan också
+säga "uppdatera e37" eller köra `python -m e37 update`. Kontona ligger kvar.
 
 ## Installera
 

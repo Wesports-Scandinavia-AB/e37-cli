@@ -81,5 +81,6 @@ Kontrollera sedan med `python -m e37 account list`.
 ## 5. Klart
 
 Berätta vad personen kan fråga om nu, till exempel "vilka ordrar kom in i
-förmiddags?" eller "har Addnature regnjackor i lager?". Säg också att det räcker
-att säga "uppdatera e37" när det kommit en ny version.
+förmiddags?" eller "har Addnature regnjackor i lager?". Säg också att Claude själv
+kollar efter nya versioner och uppdaterar e37, och att det går att säga "uppdatera
+e37" när som helst.

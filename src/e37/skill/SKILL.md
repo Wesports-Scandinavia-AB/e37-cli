@@ -9,6 +9,10 @@ description: Läs ordrar, rapporter och produkter ur webbshopsplattformen E37 me
 på macOS). Det fungerar även när `e37` inte finns i PATH. Läs `python -m e37 KOMMANDO
 --help` när något är oklart. Hjälptexterna är skrivna för dig.
 
+Första gången du använder e37 i en konversation: kolla efter en ny version med
+`python -m e37 update --check --json`, och uppdatera om det finns en (se "Uppdatera"
+längst ner).
+
 Personen du hjälper är troligen inte tekniskt lagd. Kör kommandona själv och svara
 med resultatet i vanlig svenska, inte med kommandoutskrifter.
 
@@ -382,7 +386,21 @@ I fönstret finns:
 
 ## Uppdatera
 
-När personen ber om det, eller när ett kommando i den här texten inte finns:
+**Första gången du använder e37 i en konversation**, kör:
+
+```
+python -m e37 update --check --json
+```
+
+Är `update_available` sant: kör `python -m e37 update` direkt, säg i en mening att e37
+uppdaterades (från vilken version till vilken), läs om instruktionen med
+`python -m e37 skill show` och fortsätt med det personen bad om. Uppdateringen ändrar
+ingenting i E37 och kontona ligger kvar, så du behöver inte fråga först. Svarar den att
+GitHub inte går att nå, fortsätt med den version som finns. Kolla inte igen i samma
+konversation.
+
+Uppdatera också när personen ber om det, eller när ett kommando i den här texten inte
+finns:
 
 ```
 python -m e37 update

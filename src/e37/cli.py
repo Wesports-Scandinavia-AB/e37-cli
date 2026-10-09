@@ -951,6 +951,35 @@ def cmd_skill_install(a):
     return 0
 
 
+def _check_update(current, as_json):
+    """Compare with the version on GitHub's main. Reads one file; installs nothing.
+    Offline or unreachable is not an error: the answer is then 'unknown'."""
+    import re
+    from urllib import request
+    latest = None
+    try:
+        req = request.Request(f"https://raw.githubusercontent.com/{REPO}/main/src/e37/__init__.py",
+                              headers={"User-Agent": f"e37-cli/{current}"})
+        with request.urlopen(req, timeout=5) as r:
+            m = re.search(r'__version__\s*=\s*"([^"]+)"', r.read().decode("utf-8", "replace"))
+            latest = m.group(1) if m else None
+    except OSError:
+        pass
+
+    def key(v):
+        return tuple(int(x) for x in re.findall(r"\d+", v))
+    newer = bool(latest) and key(latest) > key(current)
+    if as_json:
+        _dump({"installed": current, "latest": latest, "update_available": newer})
+    elif latest is None:
+        print(f"Kunde inte nå GitHub. Installerad version: {current}.")
+    elif newer:
+        print(f"Ny version finns: {latest} (installerad {current}). Uppdatera med: python -m e37 update")
+    else:
+        print(f"Senaste versionen ({current}) är installerad.")
+    return 0
+
+
 def cmd_update(a):
     """Reinstall from GitHub, then refresh the skill with the NEW code.
 
@@ -962,6 +991,8 @@ def cmd_update(a):
     import shutil
     import subprocess
     from . import __version__
+    if a.check:
+        return _check_update(__version__, a.json)
     url = (f"git+https://github.com/{REPO}" if shutil.which("git")
            else f"https://github.com/{REPO}/archive/refs/heads/main.zip")
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps",
@@ -1548,8 +1579,11 @@ def main(argv=None):
 
     s = _parser(sub, "update", "get the latest e37-cli from GitHub and refresh the Claude skill",
                 "Reinstall e37-cli from GitHub for this Python and rewrite the Claude skill.\n"
-                "Accounts in the keychain are kept.",
-                "example:\n  python -m e37 update")
+                "Accounts in the keychain are kept. --check only compares the installed version\n"
+                "with the one on GitHub and installs nothing.",
+                "examples:\n  python -m e37 update --check\n  python -m e37 update")
+    s.add_argument("--check", action="store_true", help="only tell whether a newer version exists")
+    _json_flag(s)
     s.set_defaults(fn=cmd_update)
 
     a = p.parse_args(argv)
