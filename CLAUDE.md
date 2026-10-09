@@ -22,6 +22,7 @@ standardbiblioteket, argparse, entry point `e37`.
 - `src/e37/shop.py`: butikens publika MCP-server (`/api/mcp`), JSON-RPC utan auth. Kräver en egen User-Agent; urllibs standard får 403.
 - `src/e37/web.py`: E37 Admin med personens egen inloggning: login, webbplatser, rapporter via `/custom/orderReportHandler.ashx`. Bara standardbiblioteket; inget har behövt en webbläsare än. Läser bara.
 - `src/e37/registers.py`: `e37 view`, marknadsregistren i E37 Admin (kampanjer, rabattkoder, taggar, attribut, sidor, innehållselement, widgets, tillval, matriser). Läser bara. Postbacken som öppnar en post tar också bort och kopierar, så argumentet tas från postens egen länk och bara för funktionerna i `_OPENERS`.
+- `src/e37/attributes.py`: `e37 campaign`, attributvärden per variant via E37:s egen export och import (typ 3). Bevisas med full export före och efter.
 - `src/e37/keychain.py`: OS-nyckelringen, en post per E37-instans. Windows via ctypes/advapi32, macOS via `/usr/bin/security`.
 - `src/e37/dialog.py`: fönstret för `e37 account add --dialog` (tkinter, med osascript som reserv på macOS). Hemligheter matas in av människan, aldrig via en assistent.
 - `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
@@ -39,9 +40,10 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
 - Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow`, `order show/status` (orderrutan tolkad från HTML) och `report list/show/get`.
-- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Av det marknad bett om saknas: ny version av en kampanjsida, och kampanjattributet på artiklar (som styr kampanjtaggar och produktlistor); se `docs/web.md`.
+- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Av det marknad bett om saknas bara att lägga till en ny version av en kampanjsida; se `docs/web.md`.
 - Via API:t: allt är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
 - Skriver: `delivery-text set --apply`, verifierat 2026-10-08 mot en riktig variant (satt, kontrollerat, tömt). Texten är per språk; alla sv-webbplatser delar fältet.
+- Skriver: `campaign add|remove --apply` via E37:s attributimport typ 3, verifierat 2026-10-09 på en dold artikel (tillagt och borttaget, full export före och efter). Uppladdningen går via fileuploadhandler.ashx och E37 frågar innan importen körs.
 - Skriver: `page change --apply` (en widget på en sida), verifierat 2026-10-09 på produktlistan på sidan AA-test (rubrik och tagg satta och tillbaka). Widgetens Spara sparar direkt.
 - Skriver: `copy --apply`, verifierat 2026-10-09 (inaktiv testkod skapad, kontrollerad, borttagen i E37). Kopiera öppnar bara en ifylld dialog; inget skapas förrän den sparas.
 - Skriver: `matrix sort --apply`, verifierat 2026-10-09 på matrisen Viktpaket (sorterad och tillbaka). Ordningen är per språk.

@@ -3,7 +3,7 @@ import json
 import sys
 from datetime import datetime
 
-from . import E37Error, admin, keychain, registers, shop, web
+from . import E37Error, admin, attributes, keychain, registers, shop, web
 
 
 def _dump(data):
@@ -564,6 +564,83 @@ def cmd_page_change(a):
         print("  Inget att ändra: fälten har redan de värdena.")
     print(f"Logg: {path}", file=sys.stderr)
     return 1 if error else 0
+
+
+def _campaign_attr(s):
+    """The id of the attribute with import key #CAMPAIGN on this instance."""
+    hits = [a for a in registers.items(s, "attributes") if a["columns"] and a["columns"][0] == "#CAMPAIGN"]
+    if len(hits) != 1:
+        raise E37Error("hittade inte kampanjattributet (#CAMPAIGN) bland artikelattributen")
+    return hits[0]["id"]
+
+
+def cmd_campaign_show(a):
+    a.limit = None
+    acc, s = _web_on_site(a)
+    attr = _campaign_attr(s)
+    _, vals = attributes.values(s, attr)
+    rows = []
+    for art, _ in _articles_from(a):
+        for v, main in attributes.variants(s, art).items():
+            rows.append({"variant": v, "main": main, "values": vals.get(v, {}).get("values", [])})
+    if a.json:
+        _dump(rows)
+        return 0
+    for r in rows:
+        print(f"  {r['variant']:<16} {', '.join(r['values']) or '–'}")
+    return 0
+
+
+def _cmd_campaign(remove):
+    def run(a):
+        a.limit = None
+        acc, s = _web_on_site(a)
+        attr = _campaign_attr(s)
+        value = a.value.strip()
+        _, vals = attributes.values(s, attr)
+        changes, mains = {}, {}
+        for art, _ in _articles_from(a):
+            for v, main in attributes.variants(s, art).items():
+                old = vals.get(v, {}).get("values", [])
+                mains[v] = main
+                if remove:
+                    new = [x for x in old if x.lower() != value.lower()]
+                else:
+                    new = old if any(x.lower() == value.lower() for x in old) else old + [value]
+                changes[v] = new
+        log = a.log or f"e37-kampanj-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+        rows, error = [], None
+        try:
+            plan, saved = attributes.set_values(s, attr, changes, apply=a.apply, update_tags=a.update_tags)
+            changed = {p["variant"] for p in plan}
+            for p in plan:
+                rows.append({"konto": acc["name"], "huvudartikel": mains.get(p["variant"], ""), "variant": p["variant"],
+                             "gammalt": "|".join(p["old"]), "nytt": "|".join(p["new"]),
+                             "status": "ändrad" if saved else "skulle ändras"})
+            for v in changes:
+                if v not in changed:
+                    rows.append({"konto": acc["name"], "huvudartikel": mains[v], "variant": v,
+                                 "gammalt": "|".join(vals.get(v, {}).get("values", [])), "nytt": "",
+                                 "status": "oförändrad"})
+        except E37Error as e:
+            error = e
+            rows.append({"konto": acc["name"], "huvudartikel": "", "variant": ", ".join(list(changes)[:20]),
+                         "gammalt": "", "nytt": "", "status": f"FEL: {e}"})
+        path = _write_log(log, rows, ("konto", "huvudartikel", "variant", "gammalt", "nytt", "status"))
+        if a.json:
+            _dump({"apply": a.apply, "log": str(path), "rows": rows})
+            return 1 if error else 0
+        print(f"{acc['name']}  kampanj {value}: {'ta bort' if remove else 'lägg till'}"
+              f"{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
+        for r in rows:
+            print(f"  {r['status']}" if r["status"].startswith("FEL")
+                  else f"  {r['variant']:<16} {r['gammalt'] or '–'} -> {r['nytt'] or '–'}  ({r['status']})")
+        if a.apply and not error and not a.update_tags:
+            print("  Kampanjtaggen och produktlistorna följer efter E37:s nästa synk eller nattjobb "
+                  "(--update-tags gör det direkt, men tar tid).")
+        print(f"Logg: {path}", file=sys.stderr)
+        return 1 if error else 0
+    return run
 
 
 def _web_order(acc, order_id):
@@ -1239,6 +1316,43 @@ def _add_tag_commands(sub):
         s.set_defaults(fn=_cmd_tag(remove))
 
 
+def _add_campaign_commands(sub):
+    def articles(s):
+        s.add_argument("articles", nargs="*", metavar="ART", help="main or variant article numbers")
+        s.add_argument("--file", help="Excel (.xlsx) or CSV with the column art-nr")
+        s.add_argument("--site", metavar="ID|NAME", help="site to work on")
+        _account_flag(s)
+        _json_flag(s)
+
+    s = _parser(sub, "show", "the campaign attribute values of articles (read-only)",
+                "The values of the campaign attribute Kampanj (#CAMPAIGN) on each variant of the\n"
+                "given articles, from E37's own attribute export.",
+                "example:\n  e37 campaign show 146355-0073 1200024087 --account vartex-outdoor")
+    articles(s)
+    s.set_defaults(fn=cmd_campaign_show)
+
+    for name, remove in (("add", False), ("remove", True)):
+        s = _parser(sub, name, f"{'take a campaign value off' if remove else 'put a campaign value on'} articles "
+                               "(dry run unless --apply)",
+                    "The campaign attribute Kampanj (#CAMPAIGN) is what campaign tags (#campaign <value>)\n"
+                    "and campaign pages' product lists are made from. This "
+                    + ("takes VALUE off" if remove else "adds VALUE to") + " every variant\n"
+                    "of the given articles and leaves their other campaign values as they are.\n\n"
+                    "Through E37's own attribute import, type 3 (only the given article and attribute\n"
+                    "combinations). With --apply the attribute is exported in full before and after:\n"
+                    "only these variants may have changed, and each exactly as planned. The generated\n"
+                    "tags follow at E37's next sync or nightly job; --update-tags does it at once but\n"
+                    "makes the import slow. A CSV log keeps the old values.",
+                    f"examples:\n  e37 campaign {name} Y26HOST 146355-0073 1200024087 --account vartex-outdoor\n"
+                    f"  e37 campaign {name} Y26HOST --file host.xlsx --apply")
+        s.add_argument("value", metavar="VALUE", help="the campaign value, e.g. Y26MIDFASTPRIS")
+        articles(s)
+        s.add_argument("--update-tags", action="store_true", help="have E37 regenerate the campaign tags at once")
+        s.add_argument("--apply", action="store_true", help="really import; without it nothing is written")
+        s.add_argument("--log", metavar="FILE", help="log path (default e37-kampanj-<time>.csv here)")
+        s.set_defaults(fn=_cmd_campaign(remove))
+
+
 def _add_page_commands(sub):
     s = _parser(sub, "show", "a content page's timed versions and widgets (read-only)",
                 "A content page (see `e37 view pages`): its timed versions, one per campaign, with\n"
@@ -1389,7 +1503,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,copy,tag,additions,matrix,page,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,copy,tag,additions,matrix,page,campaign,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -1404,6 +1518,9 @@ def main(argv=None):
 
     tg = _parser(sub, "tag", "put a tag (badge) on articles or take it off: add, remove")
     _add_tag_commands(tg.add_subparsers(dest="tag_cmd", required=True))
+
+    cp = _parser(sub, "campaign", "the campaign attribute on articles, which campaign tags and lists follow")
+    _add_campaign_commands(cp.add_subparsers(dest="campaign_cmd", required=True))
 
     pg = _parser(sub, "page", "campaign pages: versions, widgets, and changing a widget")
     _add_page_commands(pg.add_subparsers(dest="page_cmd", required=True))

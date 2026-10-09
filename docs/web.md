@@ -111,9 +111,19 @@ Kartlagt på sida 1328 ("414") på OutdoorExperten. Att ändra en widget är pro
 - **En widget öppnas från siddialogen**, med `edit_id=N;siteid=S;` till `…$pnl$usrCtrl`. Öppnas den när versionsdialogen redan är öppen kraschar E37 med "An item with the same key has already been added" (`ModalPopup.AddUserControlParameters`). Inget sparas av det, men öppna versionen och widgeten i varsin vända.
 - Widgetdialogen har flikarna Allmänna inställningar (Aktiverad, Rubrik, Rubriktyp, Höjd), Widgetinställningar (fält som `str_423` = knapptext och länk, `ddl_337` justering, `colorpicker_424`, `int_342`) och CSS. Widgetinställningarnas etiketter och bildfälten tolkas inte än.
 
+### Kampanjattributet på artiklar (`e37 campaign`, verifierat 2026-10-09)
+
+`src/e37/attributes.py`. Provat på en artikel i produktkyrkogården: värdet `Y25_wowpriser_50` tillagt och borttaget, båda gångerna bevisat med en full export före och efter.
+
+- **Läsa:** Artikelattribut → "Exportera artikelattribut" är en GET till `/custom/exporthandler.ashx?Type=ATTRIBUTES&langCode=sv&attrTypesIds=<id>;` (fler filter: `trademark`, `published`, `categoryIds`, `includeWithoutAttr=true`). Svaret är E37:s Excelmall: rad 1–4 är Typ (`4 (värdelista+)`, `0 (importera inte)`), Språk (`sv, svenska`), Namn och Importnyckel (`#CAMPAIGN`). Sedan en rad per **variant**: kolumn A variantens artikelnummer, C huvudartikeln, och en kolumn per värde. Kampanj på hela instansen: ca 80 000 varianter, 4 MB, 14 s.
+- **Skriva:** Import → Artikelattribut (`attributesImport.aspx`), i tre steg som sidans skript gör: (1) välj importtyp 3, en postback `__EVENTTARGET=ctl00$cph1$rbImportTypePartial3`; (2) skicka filen till `POST /custom/fileuploadhandler.ashx?cacheKey=<filfältets data-cacheKey>&uploadType=fileupload&overwriteOnConflict=false` som multipart med filnamnet som fältnamn; (3) tryck `ctl00$cph1$btnUpload` på samma sida. E37 frågar då "Du har gjort följande val: Partiell import … Är du säker?" och importen körs först efter `ctl00$cph1$msgBox_panel$msgBox_btnOK`. Filen i själva formuläret ignoreras.
+- **Importtyp 3** rör bara variant/attribut-kombinationerna i arket. En variantrad utan värden tömmer variantens värden för attributet. Typ 1 och 2, och kryssrutan "Radera utelämnade attribut", rör andra artiklar och används aldrig.
+- Ett eget ark räcker: A1–A4 rubrikerna, B1–B4 attributets typ, språk, namn och nyckel (upprepade per värdekolumn), sedan variantrader. Inget Data-blad behövs.
+- Kampanjtaggarna (`#campaign <värde>`) genereras om vid E37:s synk och nattjobb, eller direkt om kryssrutan "Uppdatera genererade taggar" är markerad (`--update-tags`), vilket gör importen långsam.
+
 **Kommer inte med än:**
 
-- Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
+- Värdelistan för ett attribut i attributdialogen. Värdena per variant läses i stället ur exporten, se ovan.
 - Innehållet på en sida och i en widgethållare (widgetar, texter och bilder per språk). Dialogen visar bara sidans inställningar och layout.
 - Texter för andra språk än webbplatsens. Språkflikarna (`LanguageTabContainer`) visar ett språk åt gången.
 

@@ -136,8 +136,8 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
 `view` läser. `change` ändrar fält, `copy` gör en ny kampanj eller rabattkod av en
-befintlig, `page` visar och ändrar kampanjsidornas widgetar, `tag` sätter taggar och
-badger på artiklar, `additions` byter tillval och `matrix` sorterar storlekar, se
+befintlig, `page` visar och ändrar kampanjsidornas widgetar, `campaign` sätter
+kampanjattributet på artiklar, `tag` sätter taggar och badger på artiklar, `additions` byter tillval och `matrix` sorterar storlekar, se
 nedan. Inget kommando tar bort något.
 
 ```
@@ -150,7 +150,7 @@ python -m e37 view SORT ID_ELLER_NAMN --account NAMN [--site NAMN] --json
 | `campaigns` | Kampanjer | En kampanj per valuta och webbplats. Status står i `notes` ("Pågår", "Avslutad" med slutdatum, "(Inaktiv)"). |
 | `discount-codes` | Rabattkoder | `section` skiljer vanliga koder från engångskoder. |
 | `tags` | Artikeltaggar | Ett träd. `parent` är gruppen. Badger ligger troligen under `PRODUCT_HIGHLIGHT`. Gäller vald webbplats. |
-| `attributes` | Artikelattribut | Kampanjattributet heter `Kampanj` (`#CAMPAIGN`). Värdelistan kommer inte med än. |
+| `attributes` | Artikelattribut | Kampanjattributet heter `Kampanj` (`#CAMPAIGN`). Värdena per artikel: `campaign show`. |
 | `pages` | Sidor | Inställningar och layout. Versioner och widgetar: `page show`. Gäller vald webbplats. |
 | `content` | Innehållselement | Fasta texter i butiken (knappar, rubriker), för webbplatsens språk. |
 | `widgets` | Widgethållare | Bara namnet än. |
@@ -209,9 +209,33 @@ python -m e37 page change SIDA WIDGET --set 'Rubrik=Minst 30% <br> Haglöfs' --a
   Aktiverad, Från/Till) och produktlistor ("Artikelvy från taggsida": **Tagg**).
 - **Produktlistan visar en tagg**, ofta en kampanjtagg som `#campaign y26midfastpris`.
   Den taggen genereras av E37 från attributet Kampanj på artiklarna. Att fylla listan
-  med andra artiklar är alltså att ändra kampanjattributet på artiklarna; det går inte
-  med `tag add` och e37 kan inte göra det än. Säg det. Att byta vilken tagg listan
-  visar går: `page change … --set 'Tagg=#campaign y26höst'`.
+  med andra artiklar är alltså att ändra kampanjattributet: `campaign add` (nedan), inte
+  `tag add`. Att byta vilken tagg listan visar: `page change … --set 'Tagg=#campaign y26höst'`.
+
+### Kampanjattributet ("kampanjattribut")
+
+```
+python -m e37 campaign show ART [ART …] --account NAMN --json
+python -m e37 campaign add VÄRDE ART [ART …] --account NAMN
+python -m e37 campaign add VÄRDE --file artiklar.xlsx --account NAMN
+python -m e37 campaign remove VÄRDE ART [ART …] --account NAMN
+… --apply [--update-tags]
+```
+
+- Kampanj (`#CAMPAIGN`) är ett flervalsattribut per variant med värden som
+  `Y26MIDFASTPRIS`. E37 gör taggen `#campaign y26midfastpris` av det, och kampanjsidans
+  produktlistor visar den taggen. Kolla värdet på en artikel som redan är med i
+  kampanjen (`campaign show`) så att stavningen blir exakt densamma.
+- `add` lägger till värdet på varje variant av artiklarna och behåller deras andra
+  kampanjvärden. `remove` tar bort bara det värdet. Artiklarna är huvud- eller
+  variantnummer; filen har kolumnen `art-nr`.
+- Det går via E37:s egen attributimport, typ 3, som bara rör de angivna artiklarna.
+  Före och efter exporteras hela attributet (ca 15 s per gång), och bara de angivna
+  varianterna får ha ändrats. Ett körning tar därför några minuter.
+- Torrkörning, visa, fråga, `--apply`. Kampanjtaggen och produktlistorna följer vid
+  E37:s nästa synk eller nattjobb. Behöver det synas direkt: `--update-tags` (gör
+  importen långsam). Säg vilket det blir.
+- Loggen `e37-kampanj-….csv` har de gamla värdena per variant.
 - Ändringar: torrkörning, visa, fråga, `--apply`. Widgeten sparas direkt och syns i
   butiken om versionen är aktiv. Loggen `e37-widget-….csv` har gamla värden.
 - Att lägga till en ny version eller en ny widget går inte än.
