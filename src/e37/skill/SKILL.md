@@ -135,9 +135,9 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
-`view` läser. `change` ändrar fält, `tag` sätter taggar och badger på artiklar och
-`additions` byter tillval, se nedan. Att skapa nya poster och att ändra storleks-
-ordningen går inte än. Säg det om personen ber om det.
+`view` läser. `change` ändrar fält, `tag` sätter taggar och badger på artiklar,
+`additions` byter tillval och `matrix` sorterar storlekar, se nedan. Att skapa nya
+poster går inte än. Säg det om personen ber om det.
 
 ```
 python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
@@ -154,7 +154,7 @@ python -m e37 view SORT ID_ELLER_NAMN --account NAMN [--site NAMN] --json
 | `content` | Innehållselement | Fasta texter i butiken (knappar, rubriker), för webbplatsens språk. |
 | `widgets` | Widgethållare | Bara namnet än. |
 | `addition-sets` | Tillvalsuppsättningar | Tillvalsartiklarna i ordning, med E37:s varning när en inte går att köpa. |
-| `matrices` | Artikelmatriser | Inställningar. Värdena och deras ordning kommer inte med än. |
+| `matrices` | Artikelmatriser | Inställningar. Värdena och deras ordning: `matrix values`. |
 
 - Utan ID: en lista med `id`, `name`, `columns` (listans övriga kolumner), `notes`
   (E37:s statusikoner), `section` och `parent`. `--find` filtrerar på all text.
@@ -208,6 +208,20 @@ python -m e37 tag remove TAGG ART [ART …] --account NAMN
 - Efter sparning läses taggens artikellista igen. Den ska ha ändrats med exakt de
   artiklarna. Loggen `e37-tagg-….csv` listar varje artikel; ångra med `tag remove`
   respektive `tag add`.
+
+### Storlekarnas (matrisvärdenas) ordning
+
+```
+python -m e37 matrix values Storlek --find XL --site 'Addnature SE' --account NAMN
+python -m e37 matrix sort Storlek --order 'XS,S,M,L,XL' --site 'Addnature SE' --account NAMN
+… --apply
+```
+
+- `sort` ställer de uppräknade värdena i den ordningen, på de platser de redan har.
+  Alla andra värden står kvar. Värdena skrivs exakt som `matrix values` visar dem.
+- Ordningen sparas per språk och följer webbplatsen. Ange `--site`.
+- Torrkörningen visar vilka platser som ändras. Visa, fråga, `--apply`. Efter
+  sparning läses hela ordningen igen. Loggen har den gamla ordningen.
 
 ### Tillval som inte går att köpa, och att byta dem
 

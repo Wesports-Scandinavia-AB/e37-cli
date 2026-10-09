@@ -445,6 +445,51 @@ def _cmd_tag(remove):
     return run
 
 
+def cmd_matrix_values(a):
+    acc, s = _web_on_site(a)
+    vals = registers.matrix_values(s, a.matrix)
+    if a.find:
+        vals = [(i, v) for i, v in vals if a.find.lower() in v.lower()]
+    if a.json:
+        _dump([{"position": n, "id": i, "value": v} for n, (i, v) in enumerate(vals, 1)])
+        return 0
+    for n, (i, v) in enumerate(vals, 1):
+        print(f"{n:>5}  {v}")
+    return 0
+
+
+def cmd_matrix_sort(a):
+    acc, s = _web_on_site(a)
+    wanted = [w.strip() for w in a.order.split(",") if w.strip()]
+    log = a.log or f"e37-sortering-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+    site = dict(s.sites()).get(s.current_site(), "")
+    error = None
+    try:
+        r = registers.sort_matrix(s, a.matrix, wanted, apply=a.apply)
+        status = "sorterad" if r["saved"] else ("oförändrad" if r["before"] == r["after"] else "skulle sorteras")
+        rec = {"konto": acc["name"], "webbplats": site, "matris": r["matrix"],
+               "gammalt": ",".join(r["before"]), "nytt": ",".join(r["after"]), "status": status}
+    except E37Error as e:
+        error = e
+        r = None
+        rec = {"konto": acc["name"], "webbplats": site, "matris": a.matrix, "gammalt": "", "nytt": a.order,
+               "status": f"FEL: {e}"}
+    path = _write_log(log, [rec], ("konto", "webbplats", "matris", "gammalt", "nytt", "status"))
+    if a.json:
+        _dump({"apply": a.apply, "log": str(path), **rec})
+        return 1 if error else 0
+    print(f"{acc['name']}  {rec['matris']}  {site}{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
+    if error:
+        print(f"  {rec['status']}")
+    else:
+        moved = [n for n, (b, f) in enumerate(zip(r["before"], r["after"]), 1) if b != f]
+        for n in moved[:40]:
+            print(f"  {n:>5}  {r['before'][n - 1]:<20} -> {r['after'][n - 1]}")
+        print(f"  {len(moved)} platser ändras ({status})" if moved else "  redan i den ordningen")
+    print(f"Logg: {path}", file=sys.stderr)
+    return 1 if error else 0
+
+
 def _web_order(acc, order_id):
     o = web.Session(acc).order(order_id)
     if o is None:
@@ -1098,6 +1143,38 @@ def _add_tag_commands(sub):
         s.set_defaults(fn=_cmd_tag(remove))
 
 
+def _add_matrix_commands(sub):
+    s = _parser(sub, "values", "an article matrix's values in display order (read-only)",
+                "The values of one article matrix (Storlek, Färg, ...) in the order the shop shows them,\n"
+                "for the site's language. MATRIX is its id or exact name (see `e37 view matrices`).",
+                "examples:\n  e37 matrix values Storlek --find XL --account vartex-outdoor\n"
+                "  e37 matrix values 33 --json")
+    s.add_argument("matrix", metavar="MATRIX", help="matrix id or exact name")
+    s.add_argument("--find", metavar="TEXT", help="only values containing TEXT")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_matrix_values)
+
+    s = _parser(sub, "sort", "put some matrix values in a given order (dry run unless --apply)",
+                "Put the values named in --order in that order, in the positions they already hold;\n"
+                "every other value stays where it is. So 'XS,S,M,L,XL' fixes those five among\n"
+                "themselves without touching the thousands of other sizes. The order is saved for\n"
+                "the site's language (`--site`).\n\n"
+                "With --apply the full order is read back and must be exactly the planned one.\n"
+                "The CSV log holds the old order; sort back with it.",
+                "examples:\n  e37 matrix sort Storlek --order 'XS,S,M,L,XL,XXL' --site 'Addnature SE'\n"
+                "  e37 matrix sort Storlek --order '36,37,38,39,40' --apply")
+    s.add_argument("matrix", metavar="MATRIX", help="matrix id or exact name")
+    s.add_argument("--order", required=True, metavar="'A,B,C'", help="the values, comma separated, in the wanted order")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language)")
+    s.add_argument("--apply", action="store_true", help="really save; without it nothing is written")
+    s.add_argument("--log", metavar="FILE", help="log path (default e37-sortering-<time>.csv here)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_matrix_sort)
+
+
 def _add_additions_commands(sub):
     s = _parser(sub, "check", "add-ons E37 warns cannot be bought, across addition sets (read-only)",
                 "Open every addition set (or the --set ones) and list the add-ons E37 itself warns\n"
@@ -1172,7 +1249,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,tag,additions,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,tag,additions,matrix,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -1187,6 +1264,9 @@ def main(argv=None):
 
     tg = _parser(sub, "tag", "put a tag (badge) on articles or take it off: add, remove")
     _add_tag_commands(tg.add_subparsers(dest="tag_cmd", required=True))
+
+    mx = _parser(sub, "matrix", "article matrix values (sizes, colours): values, sort")
+    _add_matrix_commands(mx.add_subparsers(dest="matrix_cmd", required=True))
 
     ad = _parser(sub, "additions", "addition sets: check for add-ons that cannot be bought, swap one")
     _add_additions_commands(ad.add_subparsers(dest="additions_cmd", required=True))

@@ -24,7 +24,7 @@ Kört med `urllib` och en cookie-jar, utan webbläsare, mot en riktig instans me
 
 ## Marknadsregistren (verifierat 2026-10-09, läser bara)
 
-`src/e37/registers.py`, kommandot `e37 view`. Underlaget är det marknad arbetar med: kampanjer, rabattkoder, badger, kampanjsidor, topprodukter, tillval som är slut och storlekssortering. Allt nedan är läsning. Inget av det skriver.
+`src/e37/registers.py`, kommandona `e37 view`, `change`, `tag`, `additions` och `matrix`. Underlaget är det marknad arbetar med: kampanjer, rabattkoder, badger, kampanjsidor, topprodukter, tillval som är slut och storlekssortering. Det här avsnittet gäller läsning. Skrivningarna står i egna avsnitt nedan.
 
 | Sort (`e37 view …`) | Sida | Listan | Öppna en post (`__EVENTTARGET=__Page`) |
 |---|---|---|---|
@@ -38,7 +38,7 @@ Kört med `urllib` och en cookie-jar, utan webbläsare, mot en riktig instans me
 | `addition-sets` | `workspace/workwith/articles/AdditionSets.aspx` | tabell, med `tr.sub` som räknar upp tillvalsartiklarna | `EditAdditionSets` → `edit_id=N;` |
 | `matrices` | `workspace/workwith/articles/matrix_list.aspx` | tabell | `EditMatrixType` → `open_id=N;` |
 
-- **Samma postback tar bort.** Funktionerna som öppnar en post (i `/bundles/scripts`) skickar `doPostBackAsync('__Page', prefix + qs)`. Syskonfunktionerna skickar `del|`, `del_`, `delete|`, `delbatch|` och `copy|` på samma sätt. Därför bygger `registers.py` aldrig argumentet själv. Det tas från postens egen länk på listsidan, och bara för funktionerna i `_OPENERS`. Rör aldrig bildknapparna `delete<N>`/`button<N>` i listorna, eller något i dialogerna.
+- **Samma postback tar bort.** Funktionerna som öppnar en post (i `/bundles/scripts`) skickar `doPostBackAsync('__Page', prefix + qs)`. Syskonfunktionerna skickar `del|`, `del_`, `delete|`, `delbatch|` och `copy|` på samma sätt. Därför bygger `registers.py` aldrig argumentet själv. Det tas från postens egen länk på listsidan, och bara för funktionerna i `_OPENERS`. Rör aldrig bildknapparna `delete<N>`/`button<N>` i listorna. I dialogerna trycks bara de knappar som avsnitten nedan beskriver.
 - En vanlig synkron postback räcker, precis som för variantdialogen. Dialogen ritas som `div.modalpopup`. Rubriken står i `div.topContent`, flikarna i `li[id$="popupTabItem|PopupTabN"]` och innehållet i `div#…_PopupTabN.popupTabContent`.
 - **Etiketter** finns i tre former: `span.triton-label > label` (tillval, taggar, matriser), en lös `<label>` före fältet (kampanjer, rabattkoder) och en cell före fältet på samma tabellrad (innehållselement, där kolumnen Beskrivning är etiketten).
 - **Underlistor:** tillvalsartiklarna är `div.dragAndDropItem` i ordning, och ikonens `title` innehåller E37:s varning när en artikel inte går att köpa ("Tillvalsartikeln har inte någon publicerad artikelvariant", "Ingen artikelvariant är köpbar i webbplats …", med senaste köpbara datum). En taggs artiklar är tabellrader med en kryssruta `cbDelete_N`.
@@ -78,10 +78,19 @@ Provat med taggen "Lagerrensning" (ingen egen sida, inga artiklar) på en artike
 - Massuppdateringen har också Undertitel och Etikett (per språk), varumärke, tillvalsuppsättningar (lägg till eller ersätt), leveranstider, lagerprofil, artikelkategori med mera.
 - Bevis: taggens egen artikellista läses före och efter.
 
+### Matrisvärdenas ordning (`e37 matrix`, verifierat 2026-10-09)
+
+Provat på matrisen "Viktpaket" (3 värden, 2 artiklar): omsorterad, kontrollerad, återställd.
+
+- Matrisdialogen har bildknappen `…$columnButtons$btnSortMatrixValues`. Den öppnar en inbäddad dialog "Sortera matrisvärden" (`…$imp$pnl$usrCtrl`) med värdena som `dragAndDropItem_<värde-id>` och ett låst textfält `…$matrixValue_<värde-id>` med värdet.
+- En dragning postar `__EVENTTARGET=…$imp$pnl$usrCtrl$PopupTab1$LanguageTabContainer1$dragAndDrop` med jQuery UI:s `sortable('serialize')` som argument: `<klient-id>_dragAndDropItem[]=<id>&…` i den nya ordningen. Sedan sparar `…$imp$pnl$usrCtrl$btnSave` den.
+- Ordningen gäller ett språk, det som webbplatsen har.
+- Storlek har över 3 000 värden. Att läsa dem tar några sekunder.
+
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
-- Matrisvärdena och deras ordning (storlekssorteringen).
+
 - Innehållet på en sida och i en widgethållare (widgetar, texter och bilder per språk). Dialogen visar bara sidans inställningar och layout.
 - Texter för andra språk än webbplatsens. Språkflikarna (`LanguageTabContainer`) visar ett språk åt gången.
 

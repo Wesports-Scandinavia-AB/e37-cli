@@ -42,6 +42,7 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 - Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Det som inte kommer med än (attributvärden, matrisvärden, sidornas och widgetarnas innehåll) står i `docs/web.md`. Skrivningarna marknad har bett om (kampanjer, rabattkoder, badger, kampanjsidor, topprodukter, tillvalsbyte, storlekssortering) är inte byggda.
 - Via API:t: allt är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
 - Skriver: `delivery-text set --apply`, verifierat 2026-10-08 mot en riktig variant (satt, kontrollerat, tömt). Texten är per språk; alla sv-webbplatser delar fältet.
+- Skriver: `matrix sort --apply`, verifierat 2026-10-09 på matrisen Viktpaket (sorterad och tillbaka). Ordningen är per språk.
 - Skriver: `tag add|remove --apply` via artikelregistrets massuppdatering, verifierat 2026-10-09 (lagt till och tagit bort på en dold artikel).
 - Skriver: `additions swap --apply`, verifierat 2026-10-09 på en uppsättning utan artiklar (bytt och tillbaka). Inbäddade dialogens Spara sparar direkt; borttag kräver ytterdialogens Spara.
 - Skriver: `change --apply` (fält i marknadsregistren), verifierat 2026-10-09 på en tagg utan artiklar och en inaktiv kampanj (satt, kontrollerat, återställt). `…$usrCtrl$isPostback` måste postas som `1`, annars försvinner ändringen tyst; se `docs/web.md`.

@@ -343,6 +343,61 @@ def _tagged(session, tag_id):
     return {i["text"].split(" ", 1)[0] for lst in d["lists"] if lst["tab"] == "Artiklar" for i in lst["items"]}
 
 
+_SORT_LT = _SUB + "$PopupTab1$LanguageTabContainer1"
+
+
+def matrix_values(session, ref):
+    """[(value id, value)] of an article matrix, in the order the site's language shows them."""
+    _, _, html = _matrix_sort_dialog(session, ref)
+    return _sort_order(html)
+
+
+def sort_matrix(session, ref, wanted, apply=False):
+    """Put some of a matrix's values in the given order, in the positions they already
+    hold: the rest stay where they are. Saved for the site's language. With apply the
+    order is read back and must be exactly the planned one.
+    Returns {matrix, before, after, saved}, the orders as value names."""
+    page, it, html = _matrix_sort_dialog(session, ref)
+    current = _sort_order(html)
+    names = [v for _, v in current]
+    missing = [w for w in wanted if w not in names]
+    if missing:
+        raise E37Error(f"{it['name']}: värdena finns inte: {', '.join(missing[:10])}")
+    if len(set(wanted)) != len(wanted) or any(names.count(w) > 1 for w in wanted):
+        raise E37Error(f"{it['name']}: ett värde förekommer två gånger; ange varje värde en gång")
+    slots = [i for i, v in enumerate(names) if v in wanted]
+    planned = list(current)
+    for slot, w in zip(slots, wanted):
+        planned[slot] = next(c for c in current if c[1] == w)
+    result = {"matrix": f"{it['name']} ({it['id']})", "before": [v for _, v in current],
+              "after": [v for _, v in planned], "saved": False}
+    if not apply or planned == current:
+        return result
+    key = _SORT_LT.replace("$", "_") + "_dragAndDropItem[]"
+    html = _post(session, page, html, {"__EVENTTARGET": _SORT_LT + "$dragAndDrop",
+                                       "__EVENTARGUMENT": "&".join(f"{key}={i}" for i, _ in planned)})
+    _post(session, page, html, {_SUB + "$PopupTab1$changesMadeHiddenField": "1",
+                                _SUB + "$btnSave.x": "5", _SUB + "$btnSave.y": "5"})
+    result["saved"] = True
+    now = matrix_values(session, it["id"])
+    if now != planned:
+        raise E37Error(f"{it['name']}: ordningen blev inte den planerade. Kontrollera i E37 Admin.")
+    return result
+
+
+def _matrix_sort_dialog(session, ref):
+    page, it, html = _open(session, "matrices", ref)
+    button = re.findall(r'name="([^"]*\$btnSortMatrixValues)"', html)
+    if not button:
+        raise E37Error(f"{it['name']}: hittade ingen sorteringsknapp")
+    return page, it, _post(session, page, html, {button[0] + ".x": "5", button[0] + ".y": "5"})
+
+
+def _sort_order(html):
+    return [(m.group(1), unescape(m.group(2)))
+            for m in re.finditer(r'\$matrixValue_(\d+)" type="text" value="([^"]*)"', html)]
+
+
 def _post(session, page, html, extra):
     data = _form_full(html)
     for k in data:
