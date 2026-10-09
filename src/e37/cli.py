@@ -357,6 +357,62 @@ def cmd_change(a):
     return 1 if error else 0
 
 
+def _web_on_site(a):
+    acc = admin.resolve_account(a.account)
+    s = web.Session(acc)
+    if a.site:
+        s.switch_site(_resolve_site(s, a.site))
+    return acc, s
+
+
+def cmd_additions_check(a):
+    acc, s = _web_on_site(a)
+    site = dict(s.sites()).get(s.current_site(), "")
+
+    def progress(k, n, name):
+        if not a.json:
+            print(f"\r  {k}/{n} {name[:50]:<50}", end="", file=sys.stderr, flush=True)
+    rows = registers.unbuyable(s, sets=a.set, progress=progress)
+    if not a.json:
+        print("\r" + " " * 60 + "\r", end="", file=sys.stderr)
+    if a.json:
+        _dump({"site": site, "rows": rows})
+        return 0
+    print(f"{acc['name']}  {site}: {len(rows)} tillval med varning\n")
+    current = None
+    for r in rows:
+        if r["set"] != current:
+            print(f"{r['set_id']:>5}  {r['set']}")
+            current = r["set"]
+        print(f"       {r['position']:>2}. {r['art_nr']:<14} {r['text'].split(', ', 2)[-1][:40]:<40}  "
+              f"⚠ {_first_line(r['notes'][0])}")
+    return 0
+
+
+def cmd_additions_swap(a):
+    acc, s = _web_on_site(a)
+    site = dict(s.sites()).get(s.current_site(), "")
+    log = a.log or f"e37-tillval-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+    rec = {"konto": acc["name"], "webbplats": site, "uppsättning": a.set, "plats": "",
+           "gammalt": a.old, "nytt": a.new, "status": ""}
+    error = None
+    try:
+        r = registers.swap_addition(s, a.set, a.old, a.new, apply=a.apply)
+        rec.update(uppsättning=f"{r['set']} ({r['set_id']})", plats=r["position"], gammalt=r["old"], nytt=r["new"],
+                   status="bytt" if r["saved"] else "skulle bytas")
+    except E37Error as e:
+        error = e
+        rec["status"] = f"FEL: {e}"
+    path = _write_log(log, [rec], ("konto", "webbplats", "uppsättning", "plats", "gammalt", "nytt", "status"))
+    if a.json:
+        _dump({"apply": a.apply, "log": str(path), **rec})
+    else:
+        print(f"{acc['name']}  {rec['uppsättning']}{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
+        print(f"  {rec['status']}" if error else f"  plats {rec['plats']}: {rec['gammalt']} -> {rec['nytt']}  ({rec['status']})")
+        print(f"Logg: {path}", file=sys.stderr)
+    return 1 if error else 0
+
+
 def _web_order(acc, order_id):
     o = web.Session(acc).order(order_id)
     if o is None:
@@ -987,6 +1043,41 @@ def _add_view_command(sub):
     s.set_defaults(fn=cmd_change)
 
 
+def _add_additions_commands(sub):
+    s = _parser(sub, "check", "add-ons E37 warns cannot be bought, across addition sets (read-only)",
+                "Open every addition set (or the --set ones) and list the add-ons E37 itself warns\n"
+                "about on the site: no published variant, or no variant that can be bought there,\n"
+                "with the date it last could be. A few seconds per set; there are often ~100.",
+                "examples:\n  e37 additions check --site 'Addnature SE' --account vartex-outdoor\n"
+                "  e37 additions check --set 3 --set 11 --site 'Addnature SE' --json")
+    s.add_argument("--set", action="append", metavar="ID|NAME", help="only this addition set, repeatable")
+    s.add_argument("--site", metavar="ID|NAME", help="site the warnings are for (default the login's current one)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_additions_check)
+
+    s = _parser(sub, "swap", "replace an add-on's article in an addition set (dry run unless --apply)",
+                "Replace the article of one add-on in an addition set, in place: same position, same\n"
+                "settings. OLD and NEW are main article numbers (as `e37 view addition-sets ID`\n"
+                "shows them). Refused when the add-on limits or preselects variants, since those\n"
+                "belong to the old article.\n\n"
+                "E37 saves an add-on as soon as its own dialog is saved, so --apply takes effect at\n"
+                "once. Afterwards the set is opened again: the new article must be at the same\n"
+                "position, the other add-ons unchanged, and every setting as before. A CSV log keeps\n"
+                "the old article; swap back with OLD and NEW the other way round.",
+                "examples:\n  e37 additions swap 3 1200027088 1200031280 --account vartex-outdoor\n"
+                "  e37 additions swap 'Rullskidor Bindningar Skate' 1200027088 1200031280 --apply")
+    s.add_argument("set", metavar="SET", help="addition set id or exact name")
+    s.add_argument("old", metavar="OLD", help="article number of the add-on to replace")
+    s.add_argument("new", metavar="NEW", help="article number of the replacement")
+    s.add_argument("--site", metavar="ID|NAME", help="site to work on")
+    s.add_argument("--apply", action="store_true", help="really save; without it nothing is written")
+    s.add_argument("--log", metavar="FILE", help="log path (default e37-tillval-<time>.csv here)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_additions_swap)
+
+
 def _add_skill_commands(sub):
     s = _parser(sub, "install", "install the Claude skill that teaches Claude to use e37",
                 "Write SKILL.md to ~/.claude/skills/e37/, where Claude Code (and Code in the\n"
@@ -1015,6 +1106,7 @@ def main(argv=None):
                     "  report   any E37 Admin report as JSON, via your own login\n"
                     "  view     campaigns, discount codes, tags, attributes, pages, addition sets, ... (read-only)\n"
                     "  change   change fields of a campaign, discount code, tag, ... (dry run unless --apply)\n"
+                    "  additions  add-ons that cannot be bought, and swapping one (dry run unless --apply)\n"
                     "  delivery-text  out-of-stock delivery text per variant (dry run unless --apply)\n"
                     "  sites    the shops your login can see\n"
                     "  account  your E37 instances, stored in the OS keychain\n"
@@ -1025,7 +1117,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,additions,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -1037,6 +1129,9 @@ def main(argv=None):
     _add_report_commands(r.add_subparsers(dest="report_cmd", required=True))
 
     _add_view_command(sub)
+
+    ad = _parser(sub, "additions", "addition sets: check for add-ons that cannot be bought, swap one")
+    _add_additions_commands(ad.add_subparsers(dest="additions_cmd", required=True))
 
     dt = _parser(sub, "delivery-text", "out-of-stock delivery text per variant and site: get, set")
     _add_delivery_commands(dt.add_subparsers(dest="delivery_cmd", required=True))

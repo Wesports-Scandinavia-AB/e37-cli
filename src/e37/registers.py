@@ -159,6 +159,129 @@ def change(session, kind, ref, sets, apply=False):
     return result
 
 
+_P = "ctl00$cph1$ModalPopup1$pnl$usrCtrl"
+_SUB = _P + "$imp$pnl$usrCtrl"
+ARTICLE_SEARCH = "service/autoCompleteArticlesExcludePackages"
+
+
+def find_article(session, art_nr):
+    """(main id, name, art nr) for an exact main article number, through the same
+    search the admin's article fields use. Exactly one, or an error."""
+    from urllib.parse import quote
+    import json
+    _, body = session._page(f"{ARTICLE_SEARCH}?query={quote(art_nr)}")
+    hits = [s["data"].split("|") for s in json.loads(body).get("suggestions", [])]
+    hits = [h for h in hits if len(h) >= 3 and h[-1] == art_nr]
+    if len(hits) != 1:
+        raise E37Error(f"hittade {len(hits)} artiklar med exakt artikelnummer {art_nr}")
+    return hits[0][0], "|".join(hits[0][1:-1]), hits[0][-1]
+
+
+def _additions(html):
+    """[(position, art nr, text, notes, edit argument)] of an open addition set, in order."""
+    out = []
+    for i, n in enumerate(_box(html).find_all(lambda x: "dragAndDropItem" in x.cls.split()), 1):
+        main = n.find(lambda x: "innerMainArea" in x.cls.split())
+        text = main.text() if main else ""
+        parts = [p.strip() for p in text.split(",")]
+        link = n.find(lambda x: x.tag == "a" and "EditAdditionalArticle" in x.attrs.get("href", ""))
+        arg = re.search(r'EditAdditionalArticle\("([^"]*)"\)', unescape(link.attrs["href"])).group(1) if link else None
+        notes = [_title(x) for x in n.find_all(lambda x: x.tag == "img" and x.attrs.get("title"))]
+        out.append((i, parts[1] if len(parts) > 1 else "", text, notes, arg))
+    return out
+
+
+def unbuyable(session, sets=None, progress=None):
+    """Add-ons E37 warns about on the session's site: [{set_id, set, position, art_nr,
+    text, notes}]. Opens every addition set (or those in sets), a few seconds each."""
+    rows = items(session, "addition-sets")
+    if sets:
+        rows = [r for r in rows if r["id"] in sets or r["name"] in sets]
+    out = []
+    for k, r in enumerate(rows, 1):
+        if progress:
+            progress(k, len(rows), r["name"])
+        _, it, html = _open(session, "addition-sets", r["id"])
+        for pos, art, text, notes, _ in _additions(html):
+            if notes:
+                out.append({"set_id": it["id"], "set": it["name"], "position": pos, "art_nr": art,
+                            "text": text, "notes": notes})
+    return out
+
+
+def swap_addition(session, set_ref, old_art, new_art, apply=False):
+    """Replace the article of one add-on in an addition set, in place: same position,
+    same settings. E37 saves an add-on as soon as its own dialog is saved.
+
+    Refused when the add-on limits or preselects variants, since those belong to the
+    old article. With apply the set and the add-on are opened again afterwards: the
+    new article must sit at the same position, every other add-on be unchanged, and
+    every setting of the add-on be as before."""
+    page, it, html = _open(session, "addition-sets", set_ref)
+    before = _additions(html)
+    hit = [a for a in before if a[1] == old_art]
+    if len(hit) != 1:
+        raise E37Error(f"{it['name']}: {len(hit)} tillval med artikelnummer {old_art}. "
+                       f"Tillvalen är: {', '.join(a[1] for a in before)}")
+    pos, _, old_text, _, arg = hit[0]
+    if any(a[1] == new_art for a in before):
+        raise E37Error(f"{it['name']}: {new_art} är redan ett tillval i uppsättningen")
+    new_id, new_name, _ = find_article(session, new_art)
+    result = {"set_id": it["id"], "set": it["name"], "position": pos, "old": old_text,
+              "new": f"{new_art}, {new_name}", "saved": False}
+
+    sub_html = _post(session, page, html, {"__EVENTTARGET": _P, "__EVENTARGUMENT": arg})
+    settings = _sub_settings(sub_html)
+    for label in ("Förvald artikelvariant", "Begränsa val"):
+        v = settings.get(label, "")
+        if v and v not in ("(Ingen förvald artikelvariant)", "Begränsa valbara artikelvarianter: nej"):
+            raise E37Error(f"{it['name']}: tillvalet {old_art} har '{label}: {v}', som hör till den gamla "
+                           f"artikeln. Byt det i E37 Admin i stället.")
+    if not apply:
+        return result
+
+    picked = _post(session, page, sub_html, {"__EVENTTARGET": _SUB + "$PopupTab1$autoArticle",
+                                             "__EVENTARGUMENT": f"{new_id}|{new_name}|{new_art}",
+                                             _SUB + "$PopupTab1$changesMadeHiddenField": "1"})
+    saved = _post(session, page, picked, {_SUB + "$btnSave.x": "5", _SUB + "$btnSave.y": "5"})
+    result["saved"] = True
+    message = _message(saved)
+
+    _, _, again = _open(session, "addition-sets", it["id"])
+    after = _additions(again)
+    expected = [(a[0], new_art if a[0] == pos else a[1]) for a in before]
+    if [(a[0], a[1]) for a in after] != expected:
+        raise E37Error(f"{it['name']}: tillvalen blev {', '.join(a[1] for a in after)}, väntade "
+                       f"{', '.join(a for _, a in expected)}. Kontrollera i E37 Admin."
+                       + (f" E37 sa: {message}" if message else ""))
+    new_arg = after[pos - 1][4]
+    now = _sub_settings(_post(session, page, again, {"__EVENTTARGET": _P, "__EVENTARGUMENT": new_arg}))
+    skip = {"AutoCompleteTB", "Valbara artikelvarianter"}
+    moved = sorted(k for k in set(settings) | set(now) if k not in skip and settings.get(k) != now.get(k))
+    if moved:
+        raise E37Error(f"{it['name']}: ANDRA INSTÄLLNINGAR ÄNDRADES på tillvalet: {', '.join(moved)}. "
+                       f"Kontrollera i E37 Admin.")
+    return result
+
+
+def _post(session, page, html, extra):
+    data = _form_full(html)
+    for k in data:
+        if k.endswith("$usrCtrl$isPostback"):
+            data[k] = "1"
+    data.update(extra)
+    return session._page(page, data)[1]
+
+
+def _sub_settings(html):
+    """The add-on dialog's settings, label -> shown value (several values joined)."""
+    out = {}
+    for c in _controls(_box(html))[0]:
+        if "$imp$" in c["name"] and c["shown"]:
+            out[c["label"]] = "; ".join(v for v in (out.get(c["label"]), c["shown"]) if v)
+    return out
+
+
 def _open(session, kind, ref):
     """(page, list item, html with the item's dialog open)."""
     page = _page(kind)

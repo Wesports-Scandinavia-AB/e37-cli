@@ -135,9 +135,9 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
-`view` läser. `change` ändrar fält, se nedan. Att skapa nya poster och att ändra
-listor inuti en post (tillvalsartiklar, en taggs artiklar, storleksordning) går inte
-än. Säg det om personen ber om det.
+`view` läser. `change` ändrar fält och `additions` byter tillval, se nedan. Att skapa
+nya poster, och att ändra en taggs artiklar eller storleksordningen, går inte än.
+Säg det om personen ber om det.
 
 ```
 python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
@@ -190,6 +190,27 @@ python -m e37 change SORT ID --set 'Fält=värde' … --apply
   på en rabattkod).
 - Aktivera inte en kampanj eller rabattkod och ändra inte rabatt eller datum på något
   som pågår utan att personen uttryckligen sagt just det. Det syns i kassan direkt.
+
+### Tillval som inte går att köpa, och att byta dem
+
+```
+python -m e37 additions check --site 'Addnature SE' --account NAMN [--set ID ...] --json
+python -m e37 additions swap SET GAMMALT_ARTNR NYTT_ARTNR --site 'Addnature SE' --account NAMN
+python -m e37 additions swap SET GAMMALT_ARTNR NYTT_ARTNR … --apply
+```
+
+- `check` öppnar varje tillvalsuppsättning och listar de tillval E37 själv varnar för
+  på webbplatsen: ingen publicerad variant, eller ingen variant som går att köpa där
+  (med senaste köpbara datum). Det tar några sekunder per uppsättning och det finns
+  ofta ett hundratal. Begränsa med `--set` när frågan gäller några få.
+- `swap` byter artikeln på ett tillval på samma plats, med samma inställningar.
+  Artikelnumren är huvudartikelns, som `view addition-sets ID` visar dem.
+- Föreslå aldrig en ersättare på egen hand. Fråga personen vilken artikel som ska in,
+  eller sök fram kandidater med `shop search` och låt personen välja.
+- Ordningen är densamma som för `change`: torrkörning, visa, fråga, `--apply`.
+  **Bytet syns i butiken direkt**, och uppsättningen kan sitta på många artiklar
+  (kolumnen Artiklar i `view addition-sets`). Säg hur många innan du sparar.
+- Loggen `e37-tillval-….csv` har den gamla artikeln. Ångra med ett byte tillbaka.
 
 ## Leveranstid vid slut i lager
 

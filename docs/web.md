@@ -57,6 +57,16 @@ Provat på en tagg utan artiklar och en inaktiv kampanj: satt, kontrollerat och 
 - Låsta fält (`disabled`), till exempel valutan på en rabattkod, nekas med ett eget fel.
 - Efter sparning öppnas posten igen och alla fält jämförs. Det är enda beviset.
 
+### Tillval i en tillvalsuppsättning (`e37 additions`, verifierat 2026-10-09)
+
+Provat på uppsättningen "Vikbart lås", som ingen artikel använde: lagt till, tagit bort, bytt och bytt tillbaka.
+
+- Varje tillval i listan har en länk `EditAdditionalArticle("articleMainId=SET;additionalArticleMainId=ART;additionNr=N;additionPurchaseMode=1")`. Det är `doPostBackAsync('…$pnl$usrCtrl', argument)` och öppnar en inbäddad dialog, `…$usrCtrl$imp$pnl$usrCtrl`, med tillvalets inställningar.
+- **Artikeln väljs med ett sökfält.** GET `/service/autoCompleteArticlesExcludePackages?query=…` ger `{"suggestions": [{"value", "data": "huvudid|namn|artnr"}]}`. Valet postas som `__EVENTTARGET=…$imp$pnl$usrCtrl$PopupTab1$autoArticle`, `__EVENTARGUMENT=<data>`, och dialogen ritas om med artikelns varianter.
+- **Den inbäddade dialogens Spara sparar direkt** (`…$imp$pnl$usrCtrl$btnSave`), utan ytterdialogens Spara. Ett nytt tillval (`…$PopupTab2$btnAdd`) eller en bytt artikel finns i E37 så fort den sparats.
+- **Ta bort väntar däremot på ytterdialogen.** `…$PopupTab2$deleteButton_N` tar bort ur listan i dialogen, men först ytterdialogens Spara (med `PopupTab2$changesMadeHiddenField=1`) tar bort det i E37. `N` hör till listraden, inte till artikeln; läs den ur raden.
+- Att byta artikel på ett befintligt tillval behåller plats och inställningar. Begränsade eller förvalda varianter hör till den gamla artikeln, så det bytet nekas.
+
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
