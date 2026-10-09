@@ -67,6 +67,14 @@ Provat på uppsättningen "Vikbart lås", som ingen artikel använde: lagt till,
 - **Ta bort väntar däremot på ytterdialogen.** `…$PopupTab2$deleteButton_N` tar bort ur listan i dialogen, men först ytterdialogens Spara (med `PopupTab2$changesMadeHiddenField=1`) tar bort det i E37. `N` hör till listraden, inte till artikeln; läs den ur raden.
 - Att byta artikel på ett befintligt tillval behåller plats och inställningar. Begränsade eller förvalda varianter hör till den gamla artikeln, så det bytet nekas.
 
+### Ny kampanj eller rabattkod (`e37 copy`, verifierat 2026-10-09)
+
+Provat: en inaktiv rabattkod E37CLI-TEST (1 %) skapad som kopia av en inaktiv kod, kontrollerad fält för fält, borttagen.
+
+- "Kopiera" i listan är `openListItem('copy', 'ID;')` (kampanjer) och `CopyDiscountCode('id=ID;text=KOD')` (rabattkoder), alltså `copy|…` till `__Page`. **Det skapar ingenting.** Det öppnar dialogen "Kopiera rabattkod – KOD", ifylld med originalets värden. Posten finns först när den dialogen sparas, på samma sätt som i `e37 change`.
+- Den nya posten hittas som den enda i listan som inte fanns före, och öppnas och jämförs med kopieringsdialogen.
+- Ta bort i listan (`DeleteDiscountCode('ID;KOD')` → `del|ID;KOD`) frågar först i E37:s meddelanderuta ("Är du säker …?"). Först `ctl00$cph1$msgBox_panel$msgBox_btnOK` tar bort. `e37` har inget kommando som tar bort; det gjordes bara för att städa efter provet.
+
 ### Taggar på artiklar (`e37 tag`, verifierat 2026-10-09)
 
 Provat med taggen "Lagerrensning" (ingen egen sida, inga artiklar) på en artikel i produktkyrkogården: lagt till, kontrollerat i taggen, tagit bort.
@@ -90,7 +98,6 @@ Provat på matrisen "Viktpaket" (3 värden, 2 artiklar): omsorterad, kontrollera
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
-- Att skapa en kampanj eller rabattkod. "Kopiera" i listan är `openListItem('copy', 'ID;')` respektive `CopyDiscountCode('id=ID;text=KOD')`, alltså `copy|…` till `__Page`. Om det skapar posten direkt eller öppnar en ifylld dialog är inte provat.
 - Innehållet på en sida och i en widgethållare (widgetar, texter och bilder per språk). Dialogen visar bara sidans inställningar och layout.
 - Texter för andra språk än webbplatsens. Språkflikarna (`LanguageTabContainer`) visar ett språk åt gången.
 

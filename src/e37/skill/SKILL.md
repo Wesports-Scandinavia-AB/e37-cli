@@ -135,9 +135,9 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
-`view` läser. `change` ändrar fält, `tag` sätter taggar och badger på artiklar,
-`additions` byter tillval och `matrix` sorterar storlekar, se nedan. Att skapa nya
-poster går inte än. Säg det om personen ber om det.
+`view` läser. `change` ändrar fält, `copy` gör en ny kampanj eller rabattkod av en
+befintlig, `tag` sätter taggar och badger på artiklar, `additions` byter tillval och
+`matrix` sorterar storlekar, se nedan. Inget kommando tar bort något.
 
 ```
 python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
@@ -190,6 +190,24 @@ python -m e37 change SORT ID --set 'Fält=värde' … --apply
   på en rabattkod).
 - Aktivera inte en kampanj eller rabattkod och ändra inte rabatt eller datum på något
   som pågår utan att personen uttryckligen sagt just det. Det syns i kassan direkt.
+
+### Ny kampanj eller rabattkod
+
+```
+python -m e37 copy discount-codes MALL --set 'Rabattkod=HOST25' --set 'Procent=25' --account NAMN
+python -m e37 copy campaigns MALL --set 'Namn på kampanj=Höstrea' --set 'Aktiverad=nej' --account NAMN
+… --apply
+```
+
+- Som i E37 Admin: en befintlig post är mall och kopieras med alla sina värden, och
+  `--set` ändrar det som ska vara annorlunda. Fråga vilken mall som avses, eller föreslå
+  en liknande post från `view` och låt personen välja.
+- En kampanj eller kod finns ofta en gång per valuta och webbplats. Gör en kopia per
+  rad, med en mall i rätt valuta (valutan går inte att ändra).
+- Skapa nya poster med `Aktiverad=nej` om personen inte uttryckligen sagt att den ska
+  gälla direkt, och säg det.
+- Torrkörning, visa, fråga, `--apply`. Efter sparning skrivs den nya postens id ut.
+  Felskapade poster tas bort i E37 Admin; `e37` tar aldrig bort något.
 
 ### Taggar och badger på artiklar
 

@@ -11,6 +11,7 @@ Addnature, Outdoorexperten med flera), från terminalen, från ett skript eller 
   poster med alla fält, och tillval som inte går att köpa. Läser bara.
 - `e37 change`: ändra fält i en kampanj, rabattkod, tagg och så vidare, via etiketten
   som E37 Admin visar.
+- `e37 copy`: ny kampanj eller rabattkod av en befintlig, som Kopiera i E37 Admin.
 - `e37 tag`: sätt en tagg eller badge på många artiklar, eller ta bort den.
 - `e37 additions`: hitta tillval som inte går att köpa, och byt ut dem på plats.
 - `e37 matrix`: storlekar och färger i visningsordning, och sortering av dem.
@@ -80,6 +81,7 @@ e37 view campaigns ID    en kampanj med alla fält (rabatt, datum, etikett, urva
 e37 view addition-sets 3 --site 'Addnature SE'   tillvalen i ordning, med E37:s köpbar-varningar
                          övriga: discount-codes, tags, attributes, pages, content, widgets, matrices
 e37 change campaigns ID --set 'Till=2026-11-30 23:59'   torrkörning; --apply sparar
+e37 copy discount-codes MALL --set 'Rabattkod=HOST25'   ny kod (eller kampanj) som kopia; --apply sparar
 e37 tag add 'ADD Black November' ART ...                 sätt en tagg/badge på artiklar; remove tar bort
 e37 matrix sort Storlek --order 'XS,S,M,L,XL'            sortera storlekar; matrix values listar
 e37 additions check --site 'Addnature SE'                tillval som inte går att köpa

@@ -39,9 +39,10 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
 - Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow`, `order show/status` (orderrutan tolkad från HTML) och `report list/show/get`.
-- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Det som inte kommer med än (attributvärden, matrisvärden, sidornas och widgetarnas innehåll) står i `docs/web.md`. Skrivningarna marknad har bett om (kampanjer, rabattkoder, badger, kampanjsidor, topprodukter, tillvalsbyte, storlekssortering) är inte byggda.
+- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Av det marknad bett om är kampanjsidor, topprodukter och kampanjattribut inte byggda (väntar på var de ligger i E37); se `docs/web.md`.
 - Via API:t: allt är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
 - Skriver: `delivery-text set --apply`, verifierat 2026-10-08 mot en riktig variant (satt, kontrollerat, tömt). Texten är per språk; alla sv-webbplatser delar fältet.
+- Skriver: `copy --apply`, verifierat 2026-10-09 (inaktiv testkod skapad, kontrollerad, borttagen i E37). Kopiera öppnar bara en ifylld dialog; inget skapas förrän den sparas.
 - Skriver: `matrix sort --apply`, verifierat 2026-10-09 på matrisen Viktpaket (sorterad och tillbaka). Ordningen är per språk.
 - Skriver: `tag add|remove --apply` via artikelregistrets massuppdatering, verifierat 2026-10-09 (lagt till och tagit bort på en dold artikel).
 - Skriver: `additions swap --apply`, verifierat 2026-10-09 på en uppsättning utan artiklar (bytt och tillbaka). Inbäddade dialogens Spara sparar direkt; borttag kräver ytterdialogens Spara.

@@ -346,16 +346,19 @@ def cmd_change(a):
         rows.append({"konto": acc["name"], "webbplats": site_name, "sort": a.kind, "id": a.ref, "namn": "",
                      "fält": "; ".join(k for k, _ in sets), "gammalt": "", "nytt": "", "status": f"FEL: {e}"})
     path = _write_log(log, rows, ("konto", "webbplats", "sort", "id", "namn", "fält", "gammalt", "nytt", "status"))
+    created = {"id": r["id"], "name": r["name"]} if copy and r and r["saved"] else None
     if a.json:
-        _dump({"apply": a.apply, "log": str(path), "rows": rows})
+        _dump({"apply": a.apply, "log": str(path), "rows": rows, **({"created": created} if copy else {})})
         return 1 if error else 0
-    print(f"{acc['name']}  {registers.REGISTERS[a.kind][1]} {a.ref}"
+    print(f"{acc['name']}  {registers.REGISTERS[a.kind][1]} {a.ref}{' (kopia)' if copy else ''}"
           f"{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
-    for r in rows:
-        print(f"  {r['status']}" if r["status"].startswith("FEL")
-              else f"  {r['fält']}: {r['gammalt']!r} -> {r['nytt']!r}  ({r['status']})")
+    for row in rows:
+        print(f"  {row['status']}" if row["status"].startswith("FEL")
+              else f"  {row['fält']}: {row['gammalt']!r} -> {row['nytt']!r}  ({row['status']})")
     if not rows:
-        print("  Inget att ändra: fälten har redan de värdena.")
+        print("  Kopian får samma värden som originalet." if copy else "  Inget att ändra: fälten har redan de värdena.")
+    if created:
+        print(f"  Ny post: {created['name']} (id {created['id']})")
     print(f"Logg: {path}", file=sys.stderr)
     return 1 if error else 0
 
