@@ -264,6 +264,85 @@ def swap_addition(session, set_ref, old_art, new_art, apply=False):
     return result
 
 
+TAG_SEARCH = "service/autoSuggestTagsExcludeGeneratedByAttribute"
+_MASS = "ctl00$cph1$mod1$pnl$usrCtrl"
+_ARTICLES = "workspace/workwith/articles/list.aspx"
+
+
+def tag_articles(session, tag_ref, art_nrs, remove=False, apply=False, chunk=200):
+    """Put a tag on main articles, or take it off, through the article register's
+    mass update ("Massuppdatera artiklar" → Taggar → Lägg till/Ta bort tagg).
+
+    art_nrs are main article numbers. Those that already have (or lack) the tag are
+    skipped. With apply the tag's own article list is read before and after: it must
+    have changed by exactly these articles. Returns {tag, change, unchanged, saved}."""
+    from urllib.parse import quote
+    import json
+    tag = _one_item(session, "tags", tag_ref)
+    _, body = session._page(f"{TAG_SEARCH}?term={quote(tag['name'])}")
+    sugg = [t for t in json.loads(body) if t.get("value") == tag["id"]]
+    if len(sugg) != 1:
+        raise E37Error(f"taggen {tag['name']} ({tag['id']}) går inte att välja i massuppdateringen "
+                       f"(genererad från ett attribut?)")
+    before = _tagged(session, tag["id"])
+    arts = [find_article(session, a) for a in dict.fromkeys(art_nrs)]
+    change = [a for a in arts if (a[2] in before) == remove]
+    result = {"tag": f"{tag['name']} ({tag['id']})", "change": [f"{a[2]} {a[1]}" for a in change],
+              "unchanged": [a[2] for a in arts if a not in change], "saved": False}
+    if not apply or not change:
+        return result
+    mode = "Ta bort tagg" if remove else "Lägg till tagg"
+    s = sugg[0]
+    hidden2 = json.dumps([{"value": s["value"], "label": s["label"], "concat": s["concat"], "Treeview": None,
+                           "icon": None, "iconTooltip": None, "extraCssClass": ""}], ensure_ascii=False)
+    for i in range(0, len(change), chunk):
+        part = change[i:i + chunk]
+        _, page = session._page(_ARTICLES)
+        data = _form_full(page)
+        data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": "massupdate_" + json.dumps([int(a[0]) for a in part])})
+        _, html = session._page(_ARTICLES, data)
+        box = _box(html)
+        if box is None or "Massuppdatera" not in html:
+            raise E37Error("massuppdateringen gick inte att öppna")
+        radio = [c for c in _controls(box)[0] if c["kind"] == "radio" and c["own"] == mode]
+        if len(radio) != 1:
+            raise E37Error(f"hittade inte valet '{mode}' i massuppdateringen")
+        _post(session, _ARTICLES, html, {
+            _MASS + "$PopupTab1$cbUpdateTags": "on", radio[0]["name"]: radio[0]["value"],
+            _MASS + "$PopupTab1$articleTags$AutoSuggestHidden": s["concat"] + ";",
+            _MASS + "$PopupTab1$articleTags$AutoSuggestHidden2": hidden2,
+            _MASS + "$PopupTab1$changesMadeHiddenField": "1",
+            _MASS + "$btnSave.x": "5", _MASS + "$btnSave.y": "5"})
+        result["saved"] = True
+    after = _tagged(session, tag["id"])
+    names = {a[2] for a in change}
+    expected = (before - names) if remove else (before | names)
+    if after != expected:
+        missing, extra = sorted(expected - after), sorted(after - expected)
+        raise E37Error(f"taggen {tag['name']}: efter sparning "
+                       + (f"saknas {', '.join(missing[:10])} " if missing else "")
+                       + (f"finns oväntat {', '.join(extra[:10])} " if extra else "")
+                       + "— kontrollera i E37 Admin.")
+    return result
+
+
+def _one_item(session, kind, ref):
+    found = items(session, kind)
+    hits = [it for it in found if str(ref) == it["id"]] or [it for it in found if str(ref).lower() == it["name"].lower()]
+    if len({it["id"] for it in hits}) != 1:
+        near = hits or [it for it in found if str(ref).lower() in it["name"].lower()]
+        listed = ", ".join(f"{h['parent'] + ' › ' if h.get('parent') else ''}{h['name']} ({h['id']})" for h in near[:10])
+        raise E37Error(f"{'Flera' if hits else 'Ingen'} post i {REGISTERS[kind][1]} heter exakt {ref!r}"
+                       + (f". {'Välj med id' if hits else 'Menade du'}: {listed}" if near else f". Lista med: e37 view {kind}"))
+    return hits[0]
+
+
+def _tagged(session, tag_id):
+    """Main article numbers on a tag, from the tag's own Artiklar tab."""
+    d = item(session, "tags", tag_id)
+    return {i["text"].split(" ", 1)[0] for lst in d["lists"] if lst["tab"] == "Artiklar" for i in lst["items"]}
+
+
 def _post(session, page, html, extra):
     data = _form_full(html)
     for k in data:

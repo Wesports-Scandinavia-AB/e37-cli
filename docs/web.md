@@ -67,6 +67,17 @@ Provat på uppsättningen "Vikbart lås", som ingen artikel använde: lagt till,
 - **Ta bort väntar däremot på ytterdialogen.** `…$PopupTab2$deleteButton_N` tar bort ur listan i dialogen, men först ytterdialogens Spara (med `PopupTab2$changesMadeHiddenField=1`) tar bort det i E37. `N` hör till listraden, inte till artikeln; läs den ur raden.
 - Att byta artikel på ett befintligt tillval behåller plats och inställningar. Begränsade eller förvalda varianter hör till den gamla artikeln, så det bytet nekas.
 
+### Taggar på artiklar (`e37 tag`, verifierat 2026-10-09)
+
+Provat med taggen "Lagerrensning" (ingen egen sida, inga artiklar) på en artikel i produktkyrkogården: lagt till, kontrollerat i taggen, tagit bort.
+
+- Taggdialogen kan bara ta bort artiklar (kryssruta `cbDelete_N`, sedan Spara). Taggar sätts från artikelregistret.
+- **Massuppdatering:** `pagePostbackAsync("massupdate", "[huvudid,…]")` på `articles/list.aspx`, alltså `__EVENTTARGET=__Page`, `__EVENTARGUMENT=massupdate_[78456,…]`. Artiklarna behöver inte vara sökta först. Dialogen heter "Massuppdatera artiklar" och ligger under `ctl00$cph1$mod1$pnl$usrCtrl`.
+- Varje fält har en egen kryssruta (`cbUpdateTags`, `cbCampaignText`, `cbUpdateAddSets` …) som säger att just det ska uppdateras. Allt annat lämnas orört.
+- Taggar: `cbUpdateTags=on`, radio `tagEdit` (Lägg till tagg / Ta bort tagg), och AutoSuggest-fälten `…$articleTags$AutoSuggestHidden` = `id;namn;` och `…AutoSuggestHidden2` = JSON-listan som webbläsaren håller. Förslagen kommer från GET `/service/autoSuggestTagsExcludeGeneratedByAttribute?term=…` (`[{value, label, concat}]`). Taggar som genereras från attribut går inte att välja.
+- Massuppdateringen har också Undertitel och Etikett (per språk), varumärke, tillvalsuppsättningar (lägg till eller ersätt), leveranstider, lagerprofil, artikelkategori med mera.
+- Bevis: taggens egen artikellista läses före och efter.
+
 **Kommer inte med än:**
 
 - Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.

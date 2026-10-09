@@ -135,9 +135,9 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
-`view` läser. `change` ändrar fält och `additions` byter tillval, se nedan. Att skapa
-nya poster, och att ändra en taggs artiklar eller storleksordningen, går inte än.
-Säg det om personen ber om det.
+`view` läser. `change` ändrar fält, `tag` sätter taggar och badger på artiklar och
+`additions` byter tillval, se nedan. Att skapa nya poster och att ändra storleks-
+ordningen går inte än. Säg det om personen ber om det.
 
 ```
 python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
@@ -190,6 +190,24 @@ python -m e37 change SORT ID --set 'Fält=värde' … --apply
   på en rabattkod).
 - Aktivera inte en kampanj eller rabattkod och ändra inte rabatt eller datum på något
   som pågår utan att personen uttryckligen sagt just det. Det syns i kassan direkt.
+
+### Taggar och badger på artiklar
+
+```
+python -m e37 tag add TAGG ART [ART …] --account NAMN
+python -m e37 tag add TAGG --file artiklar.xlsx --account NAMN
+python -m e37 tag remove TAGG ART [ART …] --account NAMN
+… --apply
+```
+
+- `TAGG` är taggens id eller exakta namn (`view tags`). Badger är taggar, ofta under
+  `PRODUCT_HIGHLIGHT`. Ett namn som inte är exakt ger förslag; välj då med id.
+- Artiklarna är huvudartikelnummer (som `6200008529`, inte variantens). Filen har
+  kolumnen `art-nr`.
+- Torrkörning, visa, fråga, `--apply`, som för `change`. Badgen syns i butiken direkt.
+- Efter sparning läses taggens artikellista igen. Den ska ha ändrats med exakt de
+  artiklarna. Loggen `e37-tagg-….csv` listar varje artikel; ångra med `tag remove`
+  respektive `tag add`.
 
 ### Tillval som inte går att köpa, och att byta dem
 

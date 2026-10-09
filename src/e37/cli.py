@@ -413,6 +413,38 @@ def cmd_additions_swap(a):
     return 1 if error else 0
 
 
+def _cmd_tag(remove):
+    def run(a):
+        a.limit = None
+        acc, s = _web_on_site(a)
+        arts = [x for x, _ in _articles_from(a)]
+        log = a.log or f"e37-tagg-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+        rows, error = [], None
+        try:
+            r = registers.tag_articles(s, a.tag, arts, remove=remove, apply=a.apply)
+            status = (("borttagen" if remove else "tillagd") if r["saved"]
+                      else ("skulle tas bort" if remove else "skulle läggas till"))
+            rows = [{"konto": acc["name"], "tagg": r["tag"], "artikel": x, "åtgärd": "ta bort" if remove else "lägg till",
+                     "status": status} for x in r["change"]]
+            rows += [{"konto": acc["name"], "tagg": r["tag"], "artikel": x, "åtgärd": "", "status": "oförändrad"}
+                     for x in r["unchanged"]]
+        except E37Error as e:
+            error = e
+            rows.append({"konto": acc["name"], "tagg": a.tag, "artikel": ", ".join(arts[:20]),
+                         "åtgärd": "ta bort" if remove else "lägg till", "status": f"FEL: {e}"})
+        path = _write_log(log, rows, ("konto", "tagg", "artikel", "åtgärd", "status"))
+        if a.json:
+            _dump({"apply": a.apply, "log": str(path), "rows": rows})
+            return 1 if error else 0
+        print(f"{acc['name']}  tagg {rows[0]['tagg'] if rows else a.tag}"
+              f"{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
+        for r in rows:
+            print(f"  {r['status']}" if r["status"].startswith("FEL") else f"  {r['artikel']:<50} {r['status']}")
+        print(f"Logg: {path}", file=sys.stderr)
+        return 1 if error else 0
+    return run
+
+
 def _web_order(acc, order_id):
     o = web.Session(acc).order(order_id)
     if o is None:
@@ -1043,6 +1075,29 @@ def _add_view_command(sub):
     s.set_defaults(fn=cmd_change)
 
 
+def _add_tag_commands(sub):
+    for name, remove in (("add", False), ("remove", True)):
+        s = _parser(sub, name, f"{'take a tag off' if remove else 'put a tag on'} main articles (dry run unless --apply)",
+                    f"{'Take an article tag off' if remove else 'Put an article tag on'} main articles, through the article "
+                    "register's mass update\n(Massuppdatera artiklar → Taggar), the way a person does it for many articles "
+                    "at once.\nTAG is the tag's id or exact name (see `e37 view tags`); badges are tags, often under\n"
+                    "PRODUCT_HIGHLIGHT. Articles are main article numbers, as arguments or from --file.\n"
+                    "Articles that already " + ("lack" if remove else "have") + " the tag are skipped.\n\n"
+                    "With --apply the tag's own article list is read before and after, and must have\n"
+                    "changed by exactly these articles. A CSV log lists every article.",
+                    f"examples:\n  e37 tag {name} 'ADD Black November' 6200008529 1200027133 --account vartex-outdoor\n"
+                    f"  e37 tag {name} 3669 --file kampanj.xlsx --apply")
+        s.add_argument("tag", metavar="TAG", help="tag id or exact name")
+        s.add_argument("articles", nargs="*", metavar="ART", help="main article numbers")
+        s.add_argument("--file", help="Excel (.xlsx) or CSV with the column art-nr")
+        s.add_argument("--site", metavar="ID|NAME", help="site to work on")
+        s.add_argument("--apply", action="store_true", help="really save; without it nothing is written")
+        s.add_argument("--log", metavar="FILE", help="log path (default e37-tagg-<time>.csv here)")
+        _account_flag(s)
+        _json_flag(s)
+        s.set_defaults(fn=_cmd_tag(remove))
+
+
 def _add_additions_commands(sub):
     s = _parser(sub, "check", "add-ons E37 warns cannot be bought, across addition sets (read-only)",
                 "Open every addition set (or the --set ones) and list the add-ons E37 itself warns\n"
@@ -1117,7 +1172,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,additions,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,tag,additions,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -1129,6 +1184,9 @@ def main(argv=None):
     _add_report_commands(r.add_subparsers(dest="report_cmd", required=True))
 
     _add_view_command(sub)
+
+    tg = _parser(sub, "tag", "put a tag (badge) on articles or take it off: add, remove")
+    _add_tag_commands(tg.add_subparsers(dest="tag_cmd", required=True))
 
     ad = _parser(sub, "additions", "addition sets: check for add-ons that cannot be bought, swap one")
     _add_additions_commands(ad.add_subparsers(dest="additions_cmd", required=True))
