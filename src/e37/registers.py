@@ -60,7 +60,7 @@ def items(session, kind):
     warnings), section (tab or heading it is listed under) and parent (tree pages)."""
     page = _page(kind)
     _, html = session._page(page)
-    return [{k: v for k, v in it.items() if k != "_arg"} for it in _list(html)]
+    return [{k: v for k, v in it.items() if not k.startswith("_")} for it in _list(html)]
 
 
 def item(session, kind, ref):
@@ -73,8 +73,9 @@ def item(session, kind, ref):
     return dialog
 
 
-def change(session, kind, ref, sets, apply=False):
-    """Change fields of one item the way a person does in its edit dialog.
+def change(session, kind, ref, sets, apply=False, copy=False):
+    """Change fields of one item the way a person does in its edit dialog. With copy,
+    make a new item instead: the item's Kopiera dialog, these fields changed, saved.
 
     sets is [(key, value)]. key is a label as `e37 view` shows it, a checkbox's own
     label, or 'Tab/Label' when the label is on two tabs. value: text as is; a list by
@@ -86,9 +87,13 @@ def change(session, kind, ref, sets, apply=False):
     targets must hold the new values and nothing else may have moved. Anything else
     raises E37Error, which the caller must stop on.
 
-    Returns {"id", "name", "changes": [{"label", "old", "new"}], "saved"}.
+    A copy is proven the same way, against the Kopiera dialog: exactly one new item
+    must appear in the list, and it must hold every value the dialog held, with the
+    changes. Returns {"id", "name", "changes": [{"label", "old", "new"}], "saved"};
+    for a copy id and name are the new item's once saved.
     """
-    page, it, html = _open(session, kind, ref)
+    known = {x["id"] for x in items(session, kind)} if copy else None
+    page, it, html = _open(session, kind, ref, copy=copy)
     controls, lists = _controls(_box(html))
     site = web_current_site(html)
     plan = []
@@ -102,7 +107,7 @@ def change(session, kind, ref, sets, apply=False):
                          "_group": group, "_form": new_form})
     result = {"id": it["id"], "name": it["name"],
               "changes": [{k: v for k, v in p.items() if not k.startswith("_")} for p in plan], "saved": False}
-    if not apply or not plan:
+    if not apply or not (plan or copy):
         return result
 
     data = _form_full(html)
@@ -138,7 +143,13 @@ def change(session, kind, ref, sets, apply=False):
     result["saved"] = True
     message = _message(saved)
 
-    _, _, again = _open(session, kind, it["id"])
+    if copy:
+        new = [x for x in items(session, kind) if x["id"] not in known]
+        if len(new) != 1:
+            raise E37Error(f"väntade en ny post i {REGISTERS[kind][1]} efter sparning, hittade {len(new)}. "
+                           "Kontrollera i E37 Admin." + (f" E37 sa: {message}" if message else ""))
+        result.update(id=new[0]["id"], name=new[0]["name"])
+    _, _, again = _open(session, kind, result["id"])
     if web_current_site(again) != site:
         raise E37Error("webbplatsen byttes under sparningen; kontrollera posten i E37 Admin")
     after, after_lists = _controls(_box(again))
@@ -416,8 +427,8 @@ def _sub_settings(html):
     return out
 
 
-def _open(session, kind, ref):
-    """(page, list item, html with the item's dialog open)."""
+def _open(session, kind, ref, copy=False):
+    """(page, list item, html with the item's dialog open, or its Kopiera dialog)."""
     page = _page(kind)
     _, html = session._page(page)
     found = _list(html)
@@ -427,8 +438,10 @@ def _open(session, kind, ref):
         raise E37Error(f"{'Flera' if hits else 'Ingen'} post i {REGISTERS[kind][1]} matchar {ref!r}. "
                        f"Lista med: e37 view {kind}")
     it = hits[0]
+    if copy and not it["_copy"]:
+        raise E37Error(f"{REGISTERS[kind][1]}: posten {it['id']} går inte att kopiera härifrån")
     data = _form_full(html)
-    data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": it["_arg"]})
+    data.update({"__EVENTTARGET": "__Page", "__EVENTARGUMENT": it["_copy"] if copy else it["_arg"]})
     _, opened = session._page(page, data)
     if _box(opened) is None:
         raise E37Error(f"{REGISTERS[kind][1]}: posten {it['id']} gick inte att öppna")
@@ -539,6 +552,22 @@ def _open_arg(href):
     return _OPENERS[fn] + q, ident.group(1)
 
 
+# The JS a list row's Kopiera button calls, and what it posts (read from E37's own
+# scripts, 2026-10-09). It opens a prefilled "Kopiera …" dialog; nothing is created
+# until that dialog is saved (verified on a discount code).
+_COPIERS = {"CopyDiscountCode": "copy|", "openListItem": "copy|"}
+
+
+def _copy_arg(js):
+    m = re.search(r"(\w+)\(([^)]*)\)", unescape(js or ""))
+    if not m or m.group(1) not in _COPIERS:
+        return None
+    args = [a.strip().strip("'\"") for a in m.group(2).split(",")]
+    if m.group(1) == "openListItem":
+        return _COPIERS["openListItem"] + args[1] if len(args) == 2 and args[0] == "copy" and re.fullmatch(r"\d+;", args[1]) else None
+    return _COPIERS[m.group(1)] + args[0] if len(args) == 1 and re.match(r"id=\d+;", args[0]) else None
+
+
 # ---- list pages ----------------------------------------------------------------
 
 def _list(html):
@@ -570,8 +599,10 @@ def _list(html):
         if parent:
             pa = parent.find(lambda x: x.tag == "a" and _open_arg(x.attrs.get("href"))[0])
             pname = pa.text() if pa else None
+        copy = next((c for c in (_copy_arg(x.attrs.get("onclick") or x.attrs.get("href"))
+                                 for x in (row or n).walk()) if c), None)
         out.append({"id": ident, "name": name, "columns": columns, "notes": notes,
-                    "section": section, "parent": pname, "_arg": arg})
+                    "section": section, "parent": pname, "_arg": arg, "_copy": copy})
     return out
 
 

@@ -327,17 +327,20 @@ def cmd_change(a):
             raise E37Error(f"--set väntar FÄLT=VÄRDE, fick {spec!r}")
         key, value = spec.split("=", 1)
         sets.append((key.strip(), value))
-    if not sets:
+    copy = getattr(a, "copy", False)
+    if not sets and not copy:
         raise E37Error(f"Ange minst ett --set 'Fält=värde'. Fälten syns med: e37 view {a.kind} {a.ref}")
     site_name = dict(s.sites()).get(site or s.current_site(), "")
-    log = a.log or f"e37-andring-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
-    rows, error = [], None
+    log = a.log or (f"e37-{'kopia' if copy else 'andring'}-{datetime.now():%Y%m%d-%H%M%S}"
+                    f"{'' if a.apply else '-torr'}.csv")
+    rows, error, r = [], None, None
+    done, would = ("skapad", "skulle skapas") if copy else ("ändrad", "skulle ändras")
     try:
-        r = registers.change(s, a.kind, a.ref, sets, apply=a.apply)
+        r = registers.change(s, a.kind, a.ref, sets, apply=a.apply, copy=copy)
         for c in r["changes"]:
             rows.append({"konto": acc["name"], "webbplats": site_name, "sort": a.kind, "id": r["id"],
                          "namn": r["name"], "fält": c["label"], "gammalt": c["old"], "nytt": c["new"],
-                         "status": "ändrad" if r["saved"] else "skulle ändras"})
+                         "status": done if r["saved"] else would})
     except E37Error as e:
         error = e
         rows.append({"konto": acc["name"], "webbplats": site_name, "sort": a.kind, "id": a.ref, "namn": "",
@@ -1119,6 +1122,26 @@ def _add_view_command(sub):
     _json_flag(s)
     s.set_defaults(fn=cmd_change)
 
+    s = _parser(sub, "copy", "make a new campaign or discount code from an existing one (dry run unless --apply)",
+                "Make a new campaign or discount code the way E37 Admin does: the template's Kopiera\n"
+                "dialog, prefilled with all its values, with the --set fields changed, then saved.\n"
+                "KIND is campaigns or discount-codes; REF the template's id or exact name.\n"
+                "Fields and values as for `e37 change`. Nothing exists until --apply saves it.\n\n"
+                "With --apply exactly one new item must appear, and it must hold every value the\n"
+                "template's copy dialog held, with the changes. Its id is printed and logged.\n"
+                "A campaign or code is often set up once per currency and site: copy one per row.",
+                "examples:\n  e37 copy discount-codes 133571 --set 'Rabattkod=HOST25' --set 'Procent=25' --account vartex-outdoor\n"
+                "  e37 copy campaigns 134770 --set 'Namn på kampanj=Höstrea' --set 'Aktiverad=nej' --apply")
+    s.add_argument("kind", choices=["campaigns", "discount-codes"], metavar="KIND", help="campaigns or discount-codes")
+    s.add_argument("ref", metavar="REF", help="id or exact name of the item to copy")
+    s.add_argument("--set", action="append", metavar="FIELD=VALUE", help="a field of the new item, repeatable")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language) to work on")
+    s.add_argument("--apply", action="store_true", help="really save; without it nothing is created")
+    s.add_argument("--log", metavar="FILE", help="log path (default e37-kopia-<time>.csv here)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_change, copy=True)
+
 
 def _add_tag_commands(sub):
     for name, remove in (("add", False), ("remove", True)):
@@ -1249,7 +1272,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,tag,additions,matrix,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,copy,tag,additions,matrix,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
