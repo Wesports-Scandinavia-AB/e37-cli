@@ -136,8 +136,9 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
 ## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
 
 `view` läser. `change` ändrar fält, `copy` gör en ny kampanj eller rabattkod av en
-befintlig, `tag` sätter taggar och badger på artiklar, `additions` byter tillval och
-`matrix` sorterar storlekar, se nedan. Inget kommando tar bort något.
+befintlig, `page` visar och ändrar kampanjsidornas widgetar, `tag` sätter taggar och
+badger på artiklar, `additions` byter tillval och `matrix` sorterar storlekar, se
+nedan. Inget kommando tar bort något.
 
 ```
 python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
@@ -150,7 +151,7 @@ python -m e37 view SORT ID_ELLER_NAMN --account NAMN [--site NAMN] --json
 | `discount-codes` | Rabattkoder | `section` skiljer vanliga koder från engångskoder. |
 | `tags` | Artikeltaggar | Ett träd. `parent` är gruppen. Badger ligger troligen under `PRODUCT_HIGHLIGHT`. Gäller vald webbplats. |
 | `attributes` | Artikelattribut | Kampanjattributet heter `Kampanj` (`#CAMPAIGN`). Värdelistan kommer inte med än. |
-| `pages` | Sidor | Inställningar och layout, inte innehållet. Gäller vald webbplats. |
+| `pages` | Sidor | Inställningar och layout. Versioner och widgetar: `page show`. Gäller vald webbplats. |
 | `content` | Innehållselement | Fasta texter i butiken (knappar, rubriker), för webbplatsens språk. |
 | `widgets` | Widgethållare | Bara namnet än. |
 | `addition-sets` | Tillvalsuppsättningar | Tillvalsartiklarna i ordning, med E37:s varning när en inte går att köpa. |
@@ -190,6 +191,30 @@ python -m e37 change SORT ID --set 'Fält=värde' … --apply
   på en rabattkod).
 - Aktivera inte en kampanj eller rabattkod och ändra inte rabatt eller datum på något
   som pågår utan att personen uttryckligen sagt just det. Det syns i kassan direkt.
+
+### Kampanjsidor och produktlistor ("topp-produkter")
+
+```
+python -m e37 page show SIDA [--version ID] --account NAMN --json
+python -m e37 page widget SIDA WIDGET --account NAMN --json
+python -m e37 page change SIDA WIDGET --set 'Rubrik=Minst 30% <br> Haglöfs' --account NAMN
+… --apply
+```
+
+- En kampanjsida är en sida med **tidsstyrda versioner**, en per kampanj, med från- och
+  till-datum. `page show` listar dem och widgetarna i den aktuella versionen (eller
+  `--version`). Sidan heter ofta något kort; `view pages --find` hittar den. Ange id
+  om namnet också är ett id.
+- Widgetarna är banners ("Splash": Rubrik, Separata länkar = knapptext och länk,
+  Aktiverad, Från/Till) och produktlistor ("Artikelvy från taggsida": **Tagg**).
+- **Produktlistan visar en tagg**, ofta en kampanjtagg som `#campaign y26midfastpris`.
+  Den taggen genereras av E37 från attributet Kampanj på artiklarna. Att fylla listan
+  med andra artiklar är alltså att ändra kampanjattributet på artiklarna; det går inte
+  med `tag add` och e37 kan inte göra det än. Säg det. Att byta vilken tagg listan
+  visar går: `page change … --set 'Tagg=#campaign y26höst'`.
+- Ändringar: torrkörning, visa, fråga, `--apply`. Widgeten sparas direkt och syns i
+  butiken om versionen är aktiv. Loggen `e37-widget-….csv` har gamla värden.
+- Att lägga till en ny version eller en ny widget går inte än.
 
 ### Ny kampanj eller rabattkod
 

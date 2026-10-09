@@ -496,6 +496,76 @@ def cmd_matrix_sort(a):
     return 1 if error else 0
 
 
+def cmd_page_show(a):
+    acc, s = _web_on_site(a)
+    p = registers.page(s, a.page, version=a.version)
+    if a.json:
+        _dump(p)
+        return 0
+    print(f"{p['name']}  (id {p['id']})")
+    if p["versions"]:
+        print("\n  Versioner")
+        for v in p["versions"]:
+            print(f"    {v['id']:>6}  {v['from'] or '':<16} – {v['to'] or '':<16}  {v['title']}")
+    print(f"\n  Widgetar{' i version ' + str(a.version) if a.version else ''}")
+    for w in p["widgets"]:
+        print(f"    {w['id']:>7}  {w['type']:<28} {w['title']}")
+    return 0
+
+
+def cmd_page_widget(a):
+    acc, s = _web_on_site(a)
+    w = registers.widget(s, a.page, a.widget)
+    if a.json:
+        _dump(w)
+        return 0
+    print(f"{w['page']}  widget {w['id']}")
+    tab = None
+    for f in w["fields"]:
+        if f["tab"] != tab:
+            print(f"\n  {f['tab']}")
+            tab = f["tab"]
+        print(f"    {f['label']}: {f['value']}")
+    return 0
+
+
+def cmd_page_change(a):
+    acc, s = _web_on_site(a)
+    sets = []
+    for spec in a.set or []:
+        if "=" not in spec:
+            raise E37Error(f"--set väntar FÄLT=VÄRDE, fick {spec!r}")
+        key, value = spec.split("=", 1)
+        sets.append((key.strip(), value))
+    if not sets:
+        raise E37Error(f"Ange minst ett --set 'Fält=värde'. Fälten syns med: e37 page widget {a.page} {a.widget}")
+    site = dict(s.sites()).get(s.current_site(), "")
+    log = a.log or f"e37-widget-{datetime.now():%Y%m%d-%H%M%S}{'' if a.apply else '-torr'}.csv"
+    rows, error = [], None
+    try:
+        r = registers.change_widget(s, a.page, a.widget, sets, apply=a.apply)
+        rows = [{"konto": acc["name"], "webbplats": site, "sida": r["page"], "widget": r["id"], "fält": c["label"],
+                 "gammalt": c["old"], "nytt": c["new"], "status": "ändrad" if r["saved"] else "skulle ändras"}
+                for c in r["changes"]]
+    except E37Error as e:
+        error = e
+        rows = [{"konto": acc["name"], "webbplats": site, "sida": a.page, "widget": a.widget,
+                 "fält": "; ".join(k for k, _ in sets), "gammalt": "", "nytt": "", "status": f"FEL: {e}"}]
+    path = _write_log(log, rows, ("konto", "webbplats", "sida", "widget", "fält", "gammalt", "nytt", "status"))
+    if a.json:
+        _dump({"apply": a.apply, "log": str(path), "rows": rows})
+        return 1 if error else 0
+    print(f"{acc['name']}  sida {a.page}, widget {a.widget}"
+          f"{'' if a.apply else '  (TORRKÖRNING, inget sparas; lägg till --apply)'}")
+    for row in rows:
+        print(f"  {row['status']}" if row["status"].startswith("FEL")
+              else f"  {row['fält']}: {row['gammalt']!r} -> {row['nytt']!r}  ({row['status']})")
+    if not rows:
+        print("  Inget att ändra: fälten har redan de värdena.")
+    print(f"Logg: {path}", file=sys.stderr)
+    return 1 if error else 0
+
+
 def _web_order(acc, order_id):
     o = web.Session(acc).order(order_id)
     if o is None:
@@ -1169,6 +1239,50 @@ def _add_tag_commands(sub):
         s.set_defaults(fn=_cmd_tag(remove))
 
 
+def _add_page_commands(sub):
+    s = _parser(sub, "show", "a content page's timed versions and widgets (read-only)",
+                "A content page (see `e37 view pages`): its timed versions, one per campaign, with\n"
+                "their dates, and the widgets of the current version or of --version. Widgets are\n"
+                "banners ('Splash') and product lists ('Artikelvy från taggsida', which shows a tag).",
+                "examples:\n  e37 page show 414 --account vartex-outdoor\n  e37 page show 1328 --version 2491 --json")
+    s.add_argument("page", metavar="PAGE", help="page id or exact name")
+    s.add_argument("--version", metavar="ID", help="widgets of this version instead of the current one")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_page_show)
+
+    s = _parser(sub, "widget", "one widget's settings: heading, links, tag, dates (read-only)",
+                "Every setting of one widget on a content page, with the labels E37 Admin shows:\n"
+                "Aktiverad, Rubrik, Från/Till, Separata länkar (button text and link), Tagg for a\n"
+                "product list, layout and CSS. Texts are for the site's language.",
+                "example:\n  e37 page widget 1328 132797 --account vartex-outdoor")
+    s.add_argument("page", metavar="PAGE", help="page id or exact name")
+    s.add_argument("widget", metavar="WIDGET", help="widget id (from `e37 page show`)")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_page_widget)
+
+    s = _parser(sub, "change", "change a widget's settings (dry run unless --apply)",
+                "Change settings of one widget, by the labels `e37 page widget` shows, as for\n"
+                "`e37 change`. A product list's tag is set with --set 'Tagg=#campaign y26höst'.\n\n"
+                "With --apply the widget's own Save is pressed, which E37 saves at once, then the\n"
+                "widget is opened again and every one of its settings compared. A CSV log keeps\n"
+                "the old values. Texts are for the --site's language.",
+                "examples:\n  e37 page change 1328 132797 --set 'Rubrik=Minst 30% <br> Haglöfs' --account vartex-outdoor\n"
+                "  e37 page change 1328 132800 --set 'Tagg=#campaign y26höst' --set 'Aktiverad=ja' --apply")
+    s.add_argument("page", metavar="PAGE", help="page id or exact name")
+    s.add_argument("widget", metavar="WIDGET", help="widget id")
+    s.add_argument("--set", action="append", metavar="FIELD=VALUE", help="a setting and its new value, repeatable")
+    s.add_argument("--site", metavar="ID|NAME", help="site (and thereby language)")
+    s.add_argument("--apply", action="store_true", help="really save; without it nothing is written")
+    s.add_argument("--log", metavar="FILE", help="log path (default e37-widget-<time>.csv here)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_page_change)
+
+
 def _add_matrix_commands(sub):
     s = _parser(sub, "values", "an article matrix's values in display order (read-only)",
                 "The values of one article matrix (Storlek, Färg, ...) in the order the shop shows them,\n"
@@ -1275,7 +1389,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,copy,tag,additions,matrix,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,change,copy,tag,additions,matrix,page,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -1290,6 +1404,9 @@ def main(argv=None):
 
     tg = _parser(sub, "tag", "put a tag (badge) on articles or take it off: add, remove")
     _add_tag_commands(tg.add_subparsers(dest="tag_cmd", required=True))
+
+    pg = _parser(sub, "page", "campaign pages: versions, widgets, and changing a widget")
+    _add_page_commands(pg.add_subparsers(dest="page_cmd", required=True))
 
     mx = _parser(sub, "matrix", "article matrix values (sizes, colours): values, sort")
     _add_matrix_commands(mx.add_subparsers(dest="matrix_cmd", required=True))

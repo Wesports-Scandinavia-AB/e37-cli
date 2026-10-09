@@ -94,20 +94,45 @@ def change(session, kind, ref, sets, apply=False, copy=False):
     """
     known = {x["id"] for x in items(session, kind)} if copy else None
     page, it, html = _open(session, kind, ref, copy=copy)
+    result = {"id": it["id"], "name": it["name"]}
+
+    def found_new():
+        if copy:
+            new = [x for x in items(session, kind) if x["id"] not in known]
+            if len(new) != 1:
+                raise E37Error(f"väntade en ny post i {REGISTERS[kind][1]} efter sparning, hittade {len(new)}. "
+                               "Kontrollera i E37 Admin.")
+            result.update(id=new[0]["id"], name=new[0]["name"])
+        return _open(session, kind, result["id"])[2]
+
+    result.update(_edit(session, page, html, sets, apply, reopen=found_new, always_save=copy))
+    return result
+
+
+_SAVE = r'name="([^"]*\$ModalPopup1\$pnl\$usrCtrl\$btnSave)"'
+
+
+def _edit(session, page, html, sets, apply, reopen, scope=None, save=_SAVE, always_save=False):
+    """The core of every field change: plan, post the whole form, prove it.
+
+    html has the dialog open. scope, if given, picks the controls that belong to the
+    dialog being edited (a nested one shares the page with its parent). save is the
+    pattern of its Save button. reopen() returns the dialog freshly opened after the
+    save. Returns {"changes", "saved"}; raises E37Error when the proof fails."""
     controls, lists = _controls(_box(html))
+    if scope:
+        controls = [c for c in controls if scope(c["name"])]
     site = web_current_site(html)
     plan = []
     for key, value in sets:
         group = _resolve(controls, key)
         new_form, new_shown = _convert(group, value, key)
-        old_shown = _shown(group)
         if _form_value(group) != new_form:
             plan.append({"label": group[0]["label"] if group[0]["kind"] != "checkbox" or not group[0]["own"]
-                         else group[0]["own"], "old": old_shown, "new": new_shown,
+                         else group[0]["own"], "old": _shown(group), "new": new_shown,
                          "_group": group, "_form": new_form})
-    result = {"id": it["id"], "name": it["name"],
-              "changes": [{k: v for k, v in p.items() if not k.startswith("_")} for p in plan], "saved": False}
-    if not apply or not (plan or copy):
+    result = {"changes": [{k: v for k, v in p.items() if not k.startswith("_")} for p in plan], "saved": False}
+    if not apply or not (plan or always_save):
         return result
 
     data = _form_full(html)
@@ -133,40 +158,36 @@ def change(session, kind, ref, sets, apply=False, copy=False):
             dirty = name[: -len(g[0]["lang"])] + "isDirty"
             if dirty in data:  # rich-text fields tell the server which languages were edited
                 data[dirty] = g[0]["lang"]
-    save = next((k for k in re.findall(r'name="([^"]*\$pnl\$usrCtrl\$btnSave)"', html)), None)
-    if not save:
-        raise E37Error("hittade ingen Spara-knapp i dialogen, avbryter")
+    button = re.findall(save, html)
+    if len(button) != 1:
+        raise E37Error(f"hittade {len(button)} Spara-knappar för dialogen, avbryter")
     if web_current_site(html) != site:
         raise E37Error("fel webbplats inför skrivning, avbryter")
-    data[save + ".x"], data[save + ".y"] = "5", "5"
+    data[button[0] + ".x"], data[button[0] + ".y"] = "5", "5"
     _, saved = session._page(page, data)
     result["saved"] = True
     message = _message(saved)
+    said = f" E37 sa: {message}" if message else ""
 
-    if copy:
-        new = [x for x in items(session, kind) if x["id"] not in known]
-        if len(new) != 1:
-            raise E37Error(f"väntade en ny post i {REGISTERS[kind][1]} efter sparning, hittade {len(new)}. "
-                           "Kontrollera i E37 Admin." + (f" E37 sa: {message}" if message else ""))
-        result.update(id=new[0]["id"], name=new[0]["name"])
-    _, _, again = _open(session, kind, result["id"])
+    again = reopen()
     if web_current_site(again) != site:
         raise E37Error("webbplatsen byttes under sparningen; kontrollera posten i E37 Admin")
     after, after_lists = _controls(_box(again))
+    if scope:
+        after = [c for c in after if scope(c["name"])]
     before = {c["name"] + ("=" + c["value"] if c["kind"] == "radio" else ""): c for c in controls}
     now = {c["name"] + ("=" + c["value"] if c["kind"] == "radio" else ""): c for c in after}
     targets = {c["name"] for p in plan for c in p["_group"]}
     moved = sorted(c["label"] for k, c in before.items()
                    if c["name"] not in targets and (k not in now or _form_value([now[k]]) != _form_value([c])))
     moved += sorted(c["label"] for k, c in now.items() if k not in before and c["name"] not in targets)
-    if moved or after_lists != lists:
+    if moved or (not scope and after_lists != lists):
         raise E37Error("ANDRA FÄLT ÄNDRADES vid sparning: " + ", ".join((moved or ["underlistor"])[:8])
-                       + ". Stanna och kontrollera posten i E37 Admin." + (f" E37 sa: {message}" if message else ""))
+                       + ". Stanna och kontrollera posten i E37 Admin." + said)
     for p in plan:
         group = [c for c in after if c["name"] == p["_group"][0]["name"]]
         if not group or _form_value(group) != p["_form"]:
-            raise E37Error(f"{p['label']}: sparat värde är {_shown(group)!r}, inte {p['new']!r}."
-                           + (f" E37 sa: {message}" if message else ""))
+            raise E37Error(f"{p['label']}: sparat värde är {_shown(group)!r}, inte {p['new']!r}." + said)
     return result
 
 
@@ -338,13 +359,26 @@ def tag_articles(session, tag_ref, art_nrs, remove=False, apply=False, chunk=200
 
 
 def _one_item(session, kind, ref):
-    found = items(session, kind)
-    hits = [it for it in found if str(ref) == it["id"]] or [it for it in found if str(ref).lower() == it["name"].lower()]
+    return _match(items(session, kind), kind, ref)
+
+
+def _match(found, kind, ref):
+    """The one item ref names: an id, or an exact name. A ref that is one item's id and
+    another's name (a page called "414" next to the page with id 414) is refused."""
+    ref = str(ref).strip()
+    by_id = [it for it in found if ref == it["id"]]
+    by_name = [it for it in found if ref.lower() == it["name"].lower()]
+
+    def show(hs):
+        return ", ".join(f"{h['parent'] + ' › ' if h.get('parent') else ''}{h['name']} ({h['id']})" for h in hs[:10])
+    if by_id and by_name and {h["id"] for h in by_name} != {by_id[0]["id"]}:
+        raise E37Error(f"{ref!r} är både id för {show(by_id)} och namn på {show(by_name)} i "
+                       f"{REGISTERS[kind][1]}. Ange id för den som avses.")
+    hits = by_id or by_name
     if len({it["id"] for it in hits}) != 1:
-        near = hits or [it for it in found if str(ref).lower() in it["name"].lower()]
-        listed = ", ".join(f"{h['parent'] + ' › ' if h.get('parent') else ''}{h['name']} ({h['id']})" for h in near[:10])
+        near = hits or [it for it in found if ref.lower() in it["name"].lower()]
         raise E37Error(f"{'Flera' if hits else 'Ingen'} post i {REGISTERS[kind][1]} heter exakt {ref!r}"
-                       + (f". {'Välj med id' if hits else 'Menade du'}: {listed}" if near else f". Lista med: e37 view {kind}"))
+                       + (f". {'Välj med id' if hits else 'Menade du'}: {show(near)}" if near else f". Lista med: e37 view {kind}"))
     return hits[0]
 
 
@@ -431,13 +465,7 @@ def _open(session, kind, ref, copy=False):
     """(page, list item, html with the item's dialog open, or its Kopiera dialog)."""
     page = _page(kind)
     _, html = session._page(page)
-    found = _list(html)
-    hits = [it for it in found if str(ref) == it["id"]] or \
-           [it for it in found if str(ref).lower() == it["name"].lower()]
-    if len({it["id"] for it in hits}) != 1:
-        raise E37Error(f"{'Flera' if hits else 'Ingen'} post i {REGISTERS[kind][1]} matchar {ref!r}. "
-                       f"Lista med: e37 view {kind}")
-    it = hits[0]
+    it = _match(_list(html), kind, ref)
     if copy and not it["_copy"]:
         raise E37Error(f"{REGISTERS[kind][1]}: posten {it['id']} går inte att kopiera härifrån")
     data = _form_full(html)
@@ -510,7 +538,10 @@ def _convert(group, value, key):
         raise E37Error(f"{key}: en kryssruta tar ja eller nej, inte {v!r}")
     if c["kind"] in ("select", "radio"):
         opts = c["options"] if c["kind"] == "select" else [(r["value"], r["own"] or r["value"]) for r in group]
-        hit = [o for o in opts if o[1].strip().lower() == v.strip().lower()] or [o for o in opts if o[0] == v]
+        def norm(x):   # tree lists indent their options with "- ", "-- "
+            return re.sub(r"^[\s\-–]+", "", x).strip().lower()
+        hit = ([o for o in opts if o[1].strip().lower() == v.strip().lower()]
+               or [o for o in opts if norm(o[1]) == norm(v)] or [o for o in opts if o[0] == v])
         if len({o[0] for o in hit}) != 1:
             near = [o[1] for o in opts if v.strip().lower() in o[1].lower()][:15]
             raise E37Error(f"{key}: {'flera val' if hit else 'inget val'} heter {v!r}."
@@ -663,7 +694,10 @@ def _controls(box):
                 c = _control(n, labels)
                 if c is None or c["name"].endswith("$cbCheckAll"):
                     continue
-                lab = _row_label(n) or label or c["name"].split("$")[-1]
+                if c["own"] and c["kind"] not in ("checkbox", "radio"):
+                    lab, c["own"] = c["own"], None   # a <label for=…> names a text field or list itself
+                else:
+                    lab = _row_label(n) or label or c["own"] or c["name"].split("$")[-1]
                 if c["own"] == lab:
                     c["own"] = None
                 if c["lang"] and c["lang"] not in lab:
@@ -680,7 +714,8 @@ def _control(n, labels):
     t = (n.attrs.get("type") or "text").lower()
     name = n.attrs["name"]
     last = name.split("$")[-1]
-    c = {"name": name, "own": labels.get(n.attrs.get("id")), "options": [],
+    # Widget settings label by the field's short name (for="str_423"), not its id.
+    c = {"name": name, "own": labels.get(n.attrs.get("id")) or labels.get(last), "options": [],
          "lang": last if re.fullmatch(r"[a-z]{2}", last) else None,
          "disabled": "disabled" in n.attrs}
     if n.tag == "select":
@@ -745,6 +780,75 @@ def _merge(fields):
             out.append(dict(f))
     return out
 
+
+# ---- content pages: versions and widgets --------------------------------------
+#
+# A campaign page is a content page with timed versions, one per campaign, each with
+# its own widgets (banners, product lists from a tag). The page dialog lists them;
+# a widget opens in a dialog nested in the page dialog. Opening a widget while a
+# version dialog is open makes E37 fail ("An item with the same key has already been
+# added"), so each widget is opened from a freshly opened page. See docs/web.md.
+
+_INSERT_WIDGET = re.compile(r"InsertWidget\('(\d+)', '((?:[^'\\]|\\.)*)', '[^']*', '[^']*', '([^']*)'")
+_IN_WIDGET = re.compile(r"\$imp\$pnl\$usrCtrl\$")
+_WIDGET_SAVE = r'name="([^"]*\$ModalPopup1\$pnl\$usrCtrl\$imp\$pnl\$usrCtrl\$btnSave)"'
+
+
+def page(session, ref, version=None):
+    """A content page's versions [{id, title, from, to}] and the widgets [{id, title,
+    type}] of its current version, or of the given version id."""
+    import json
+    pg, it, html = _open(session, "pages", ref)
+    versions = []
+    for a in _box(html).find_all(lambda n: n.tag == "a" and "EditVersion(" in n.attrs.get("href", "")):
+        vid = re.search(r"id=(\d+);", unescape(a.attrs["href"])).group(1)
+        row = a.closest(lambda p: p.tag == "tr")
+        cells = [c.text() for c in row.children_el()] if row else [a.text()]
+        dates = [c for c in cells if re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", c)]
+        versions.append({"id": vid, "title": a.text() or next((c for c in cells if c), ""),
+                         "from": dates[0] if dates else None, "to": dates[1] if len(dates) > 1 else None})
+    source = html
+    if version:
+        if str(version) not in {v["id"] for v in versions}:
+            raise E37Error(f"sidan {it['name']} har ingen version {version}")
+        source = _post(session, pg, html, {"__EVENTTARGET": _P, "__EVENTARGUMENT": f"editV_id={int(version)};"})
+    widgets = [{"id": i, "title": json.loads('"' + t.replace('"', '\\"') + '"'), "type": ty}
+               for i, t, ty in _INSERT_WIDGET.findall(source)]
+    return {"id": it["id"], "name": it["name"], "versions": versions, "widgets": widgets}
+
+
+def widget(session, page_ref, widget_id):
+    """One widget's settings as {page, id, title, fields}, like item() for a register."""
+    _, it, html = _open_widget(session, page_ref, widget_id)
+    controls, _ = _controls(_box(html))
+    fields = [{"tab": c["tab"], "label": c["label"], "value": c["shown"]}
+              for c in controls if _IN_WIDGET.search(c["name"]) and c["shown"] not in (None, "")]
+    return {"page": f"{it['name']} ({it['id']})", "id": str(widget_id), "fields": _merge(fields)}
+
+
+def change_widget(session, page_ref, widget_id, sets, apply=False):
+    """Change fields of one widget on a content page, like change() for a register item:
+    dry run unless apply; with apply the widget's own Save, then the widget opened again
+    and every one of its fields compared. Returns {page, id, changes, saved}."""
+    pg, it, html = _open_widget(session, page_ref, widget_id)
+    result = {"page": f"{it['name']} ({it['id']})", "id": str(widget_id)}
+    result.update(_edit(session, pg, html, sets, apply,
+                        reopen=lambda: _open_widget(session, it["id"], widget_id)[2],
+                        scope=lambda name: bool(_IN_WIDGET.search(name)), save=_WIDGET_SAVE))
+    return result
+
+
+def _open_widget(session, page_ref, widget_id):
+    pg, it, html = _open(session, "pages", page_ref)
+    site = web_current_site(html)
+    # A widget of another version is not drawn on the page dialog; it still opens by id.
+    opened = _post(session, pg, html, {"__EVENTTARGET": _P,
+                                       "__EVENTARGUMENT": f"edit_id={int(widget_id)};siteid={site};"})
+    err = re.search(r"Teknisk information</h3>\s*([^<]{0,160})", opened)
+    if err or _box(opened) is None or not _IN_WIDGET.search(opened):
+        raise E37Error(f"widget {widget_id} på sidan {it['name']} gick inte att öppna"
+                       + (f": {err.group(1).strip()}" if err else ""))
+    return pg, it, opened
 
 # ---- a small DOM on html.parser ------------------------------------------------
 

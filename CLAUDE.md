@@ -39,9 +39,10 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
 - Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow`, `order show/status` (orderrutan tolkad från HTML) och `report list/show/get`.
-- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Av det marknad bett om är kampanjsidor, topprodukter och kampanjattribut inte byggda (väntar på var de ligger i E37); se `docs/web.md`.
+- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Av det marknad bett om saknas: ny version av en kampanjsida, och kampanjattributet på artiklar (som styr kampanjtaggar och produktlistor); se `docs/web.md`.
 - Via API:t: allt är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
 - Skriver: `delivery-text set --apply`, verifierat 2026-10-08 mot en riktig variant (satt, kontrollerat, tömt). Texten är per språk; alla sv-webbplatser delar fältet.
+- Skriver: `page change --apply` (en widget på en sida), verifierat 2026-10-09 på produktlistan på sidan AA-test (rubrik och tagg satta och tillbaka). Widgetens Spara sparar direkt.
 - Skriver: `copy --apply`, verifierat 2026-10-09 (inaktiv testkod skapad, kontrollerad, borttagen i E37). Kopiera öppnar bara en ifylld dialog; inget skapas förrän den sparas.
 - Skriver: `matrix sort --apply`, verifierat 2026-10-09 på matrisen Viktpaket (sorterad och tillbaka). Ordningen är per språk.
 - Skriver: `tag add|remove --apply` via artikelregistrets massuppdatering, verifierat 2026-10-09 (lagt till och tagit bort på en dold artikel).
