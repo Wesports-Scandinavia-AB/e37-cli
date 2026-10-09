@@ -6,6 +6,9 @@ Addnature, Outdoorexperten med flera), från terminalen, från ett skript eller 
 - `e37 order` och `e37 report`: E37 Admin med din egen inloggning. Orderflödet och alla
   rapporter (försäljning per artikel och varumärke, moms, lager, ...) som JSON. Ingen
   API-nyckel behövs; finns en används den där E37:s API kan svara.
+- `e37 view`: kampanjer, rabattkoder, artikeltaggar, attribut, sidor, innehållselement,
+  widgets, tillvalsuppsättningar och artikelmatriser i E37 Admin. Listor och enskilda
+  poster med alla fält, och tillval som inte går att köpa. Läser bara.
 - `e37 delivery-text`: läs och sätt leveranstiden som visas när en variant är slut i
   lager, från Excel eller CSV. Det enda som skriver till E37: torrkörning som standard,
   och varje sparning kontrolleras mot alla fält i varianten.
@@ -64,6 +67,11 @@ e37 delivery-text set --file lista.xlsx --site 'Addnature SE' --text 'Förvänta
 e37 report list          rapporterna i E37 Admin
 e37 report show 21       en rapports inställningar och tillåtna värden
 e37 report get 21 --from '2026-10-01 00:00' --to '2026-10-07 23:59' --site 'Addnature SE'
+
+e37 view campaigns       kampanjerna med status; --find TEXT filtrerar
+e37 view campaigns ID    en kampanj med alla fält (rabatt, datum, etikett, urval)
+e37 view addition-sets 3 --site 'Addnature SE'   tillvalen i ordning, med E37:s köpbar-varningar
+                         övriga: discount-codes, tags, attributes, pages, content, widgets, matrices
 
 e37 shop search ORD      produktsök, --top, --brand, --sort, --in-stock, --campaign
 e37 shop product NR      en produktmodell via modellnummer (--gtin för variant), --specs

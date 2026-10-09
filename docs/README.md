@@ -6,7 +6,7 @@ Anteckningar om E37: API-endpoints, autentisering, MCP-upplägg och beslut.
 |---|---|
 | [order-api.md](order-api.md) | E37 Order API: orderflödesrapporten, Triton Admin REST API, statuswebhook, pollningsrecept och öppna frågor. Specen själv finns hos E37: <https://admin3.e37.se/docs/>. |
 | [mcp.md](mcp.md) | E37:s publika MCP-server per butik (verktyg, protokoll, svarsformat). |
-| [web.md](web.md) | Karta över E37 Admin som webbgränssnitt: inloggning, butiksväljare, artikelregister, variantdialog, luckor i API:et och hur vi bygger `e37 web`. |
+| [web.md](web.md) | Karta över E37 Admin som webbgränssnitt: inloggning, butiksväljare, artikelregister, variantdialog, marknadsregistren (`e37 view`), luckor i API:et och hur vi bygger `e37 web`. |
 
 ## Översikt över E37:s ytor
 

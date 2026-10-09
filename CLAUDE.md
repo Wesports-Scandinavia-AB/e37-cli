@@ -21,6 +21,7 @@ standardbiblioteket, argparse, entry point `e37`.
 - `src/e37/admin.py`: E37 Admin, alltså orderflödesrapporten (nyckel i query) och Triton Admin REST API (Basic: webshop-ID och nyckel). Läser bara.
 - `src/e37/shop.py`: butikens publika MCP-server (`/api/mcp`), JSON-RPC utan auth. Kräver en egen User-Agent; urllibs standard får 403.
 - `src/e37/web.py`: E37 Admin med personens egen inloggning: login, webbplatser, rapporter via `/custom/orderReportHandler.ashx`. Bara standardbiblioteket; inget har behövt en webbläsare än. Läser bara.
+- `src/e37/registers.py`: `e37 view`, marknadsregistren i E37 Admin (kampanjer, rabattkoder, taggar, attribut, sidor, innehållselement, widgets, tillval, matriser). Läser bara. Postbacken som öppnar en post tar också bort och kopierar, så argumentet tas från postens egen länk och bara för funktionerna i `_OPENERS`.
 - `src/e37/keychain.py`: OS-nyckelringen, en post per E37-instans. Windows via ctypes/advapi32, macOS via `/usr/bin/security`.
 - `src/e37/dialog.py`: fönstret för `e37 account add --dialog` (tkinter, med osascript som reserv på macOS). Hemligheter matas in av människan, aldrig via en assistent.
 - `src/e37/cli.py`: argparse-kommandona. Ingen anropslogik här.
@@ -38,6 +39,7 @@ Webbgränssnittet (ASP.NET WebForms) och en egen MCP-server läggs till som modu
 
 - `e37 shop` fungerar mot Addnature och Outdoorexperten.
 - Via webbinloggningen, verifierat mot en riktig instans: inloggning, `sites`, `order flow`, `order show/status` (orderrutan tolkad från HTML) och `report list/show/get`.
+- Via webbinloggningen, verifierat 2026-10-09: `view` för de nio marknadsregistren. Det som inte kommer med än (attributvärden, matrisvärden, sidornas och widgetarnas innehåll) står i `docs/web.md`. Skrivningarna marknad har bett om (kampanjer, rabattkoder, badger, kampanjsidor, topprodukter, tillvalsbyte, storlekssortering) är inte byggda.
 - Via API:t: allt är byggt efter OpenAPI-specen men aldrig kört med giltig nyckel.
 - Skriver: bara `delivery-text set --apply`, verifierat 2026-10-08 mot en riktig variant (satt, kontrollerat, tömt). Texten är per språk; alla sv-webbplatser delar fältet.
 - Regler för allt som skriver: torrkörning som standard och `--apply` för att spara; hela formuläret serialiseras som en webbläsare gör (`_form_full`: textarea, multi-select, inga disabled); efter sparning öppnas posten igen och ALLA fält jämförs, och något oväntat ändrat stoppar körningen; logg med gammalt och nytt värde.

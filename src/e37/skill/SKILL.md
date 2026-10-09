@@ -1,6 +1,6 @@
 ---
 name: e37
-description: Läs ordrar, rapporter och produkter ur webbshopsplattformen E37 med e37-cli. Använd när användaren frågar om ordrar, orderflöde, försäljning per artikel eller varumärke, moms, återbetalningar, lager, presentkort, en orders status, eller om produkter, priser, lagerstatus och varumärken i en E37-butik (t.ex. Addnature, Outdoorexperten, Cykloteket, Bikester, Rull), vill läsa eller sätta leveranstiden som visas när en vara är slut i lager, eller vill lägga till eller ändra sitt E37-konto. Exempel "vilka ordrar kom in i förmiddags", "vilka varumärken sålde mest på Addnature i veckan", "vad har order 1189437 för status", "har Addnature regnjackor från Patagonia i lager", "lägg till mitt E37-konto".
+description: Läs ordrar, rapporter och produkter ur webbshopsplattformen E37 med e37-cli. Använd när användaren frågar om ordrar, orderflöde, försäljning per artikel eller varumärke, moms, återbetalningar, lager, presentkort, en orders status, eller om produkter, priser, lagerstatus och varumärken i en E37-butik (t.ex. Addnature, Outdoorexperten, Cykloteket, Bikester, Rull), vill läsa eller sätta leveranstiden som visas när en vara är slut i lager, frågar om kampanjer, rabattkoder, artikeltaggar och badger, artikelattribut, innehållssidor, widgets, tillvalsuppsättningar (och vilka tillval som inte går att köpa) eller storleksmatriser i E37 Admin, eller vill lägga till eller ändra sitt E37-konto. Exempel "vilka kampanjer pågår på Addnature", "vilka tillval är slut i lager", "vad gäller för rabattkoden X", "vilka ordrar kom in i förmiddags", "vilka varumärken sålde mest på Addnature i veckan", "vad har order 1189437 för status", "har Addnature regnjackor från Patagonia i lager", "lägg till mitt E37-konto".
 ---
 
 # e37: ordrar, rapporter och produkter ur E37
@@ -33,7 +33,7 @@ python -m e37 account list --json
 
 ger namn, webbshop-ID, server, om API-nyckel finns (`apiKey`) och e-post för
 webbinloggningen (`webEmail`). Finns flera konton måste du ange `--account NAMN`
-på `order`, `report` och `sites`. Gissa aldrig, fråga vilken butik eller instans som avses.
+på `order`, `report`, `view` och `sites`. Gissa aldrig, fråga vilken butik eller instans som avses.
 Det här är den enda källan till vilka konton som finns.
 
 ## Produkter (ingen inloggning)
@@ -132,6 +132,40 @@ python -m e37 report get RAPPORT --account NAMN --from 'ÅÅÅÅ-MM-DD TT:MM' --
   standard, slå på med `--set ID=true`.
 - Svaret är `{"rows": [...], "columns": [...]}`.
 - Långa perioder och "alla webbplatser" kan bli stora. Börja med en kort period.
+
+## Kampanjer, rabattkoder, taggar, sidor, tillval (personens inloggning)
+
+Läser bara. Ändrar ingenting i E37. Det finns ännu inget kommando som skapar eller
+ändrar en kampanj, en rabattkod, en tagg eller ett tillval. Säg det om personen ber
+om en ändring, och erbjud dig att visa vad som gäller nu.
+
+```
+python -m e37 view SORT --account NAMN [--find TEXT] [--site NAMN] --json
+python -m e37 view SORT ID_ELLER_NAMN --account NAMN [--site NAMN] --json
+```
+
+| SORT | I E37 Admin | Bra att veta |
+|---|---|---|
+| `campaigns` | Kampanjer | En kampanj per valuta och webbplats. Status står i `notes` ("Pågår", "Avslutad" med slutdatum, "(Inaktiv)"). |
+| `discount-codes` | Rabattkoder | `section` skiljer vanliga koder från engångskoder. |
+| `tags` | Artikeltaggar | Ett träd. `parent` är gruppen. Badger ligger troligen under `PRODUCT_HIGHLIGHT`. Gäller vald webbplats. |
+| `attributes` | Artikelattribut | Kampanjattributet heter `Kampanj` (`#CAMPAIGN`). Värdelistan kommer inte med än. |
+| `pages` | Sidor | Inställningar och layout, inte innehållet. Gäller vald webbplats. |
+| `content` | Innehållselement | Fasta texter i butiken (knappar, rubriker), för webbplatsens språk. |
+| `widgets` | Widgethållare | Bara namnet än. |
+| `addition-sets` | Tillvalsuppsättningar | Tillvalsartiklarna i ordning, med E37:s varning när en inte går att köpa. |
+| `matrices` | Artikelmatriser | Inställningar. Värdena och deras ordning kommer inte med än. |
+
+- Utan ID: en lista med `id`, `name`, `columns` (listans övriga kolumner), `notes`
+  (E37:s statusikoner), `section` och `parent`. `--find` filtrerar på all text.
+- Med ID eller exakt namn: `title`, `fields` (`tab`, `label`, `value`) och `lists`,
+  alltså dialogens underlistor i ordning (`items` med `text` och ibland `notes`).
+  Tomma fält tas inte med.
+- **Tillval som inte går att köpa:** kör `view addition-sets --json`, öppna sedan de
+  uppsättningar som är aktuella och läs `notes` på varje tillval. Ett tillval utan
+  `notes` går att köpa. Varningen gäller den webbplats som är vald, så ange `--site`.
+- Att öppna en post tar några sekunder, och en kampanj är stor. Lista först och
+  öppna bara de poster som frågan gäller.
 
 ## Leveranstid vid slut i lager (det enda som skriver)
 

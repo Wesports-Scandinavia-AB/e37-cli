@@ -22,6 +22,37 @@ Kört med `urllib` och en cookie-jar, utan webbläsare, mot en riktig instans me
 | Byta webbplats | Postback med `__EVENTTARGET=ctl00$ddlSitePicker` och nytt värde. Det är sessionstillstånd. |
 | Andra handlers | `/custom/print.ashx?printType=1|2|3&orderid=` (följesedel, kvitto, returnota), `/custom/exportListHandler.ashx`, `/custom/exporthandler.ashx`. Inte undersökta. |
 
+## Marknadsregistren (verifierat 2026-10-09, läser bara)
+
+`src/e37/registers.py`, kommandot `e37 view`. Underlaget är det marknad arbetar med: kampanjer, rabattkoder, badger, kampanjsidor, topprodukter, tillval som är slut och storlekssortering. Allt nedan är läsning. Inget av det skriver.
+
+| Sort (`e37 view …`) | Sida | Listan | Öppna en post (`__EVENTTARGET=__Page`) |
+|---|---|---|---|
+| `campaigns` | `workspace/workwith/prices/campaigns.aspx` | `table#tblCampaigns`, `tr.listRow` | `openListItem('open', N)` → `open|N` |
+| `discount-codes` | `workspace/workwith/prices/discountcodes.aspx` | tabeller per flik (Rabattkoder, Engångskoder) | `EditDiscountCode('id=N;')` → `open|id=N;` (engångskoder har `type=2` i strängen) |
+| `tags` | `workspace/workwith/articles/tags.aspx` | träd, `div.node[data-item-id]`, barn i `div.childNodes` | `EditArticleTag` → `open_id=N;site=S;` |
+| `attributes` | `workspace/workwith/articles/attribute_list.aspx` | en tabell per kategori under `<h3>` | `EditAttributeType` → `edit_id=N;` |
+| `pages` | `workspace/layout/pages/contentpages.aspx` | träd, flikar Sidor och Systemsidor | `EditContentPage` → `1|…`, `EditShopPage` → `2|…` |
+| `content` | `workspace/layout/contentElements.aspx` | tabell | `ShowCategory` → `open_id=N;` |
+| `widgets` | `workspace/layout/widgets/widgets.aspx` | tabell per flik | `EditWidgetContainer` → `edit_id=N;` |
+| `addition-sets` | `workspace/workwith/articles/AdditionSets.aspx` | tabell, med `tr.sub` som räknar upp tillvalsartiklarna | `EditAdditionSets` → `edit_id=N;` |
+| `matrices` | `workspace/workwith/articles/matrix_list.aspx` | tabell | `EditMatrixType` → `open_id=N;` |
+
+- **Samma postback tar bort.** Funktionerna som öppnar en post (i `/bundles/scripts`) skickar `doPostBackAsync('__Page', prefix + qs)`. Syskonfunktionerna skickar `del|`, `del_`, `delete|`, `delbatch|` och `copy|` på samma sätt. Därför bygger `registers.py` aldrig argumentet själv. Det tas från postens egen länk på listsidan, och bara för funktionerna i `_OPENERS`. Rör aldrig bildknapparna `delete<N>`/`button<N>` i listorna, eller något i dialogerna.
+- En vanlig synkron postback räcker, precis som för variantdialogen. Dialogen ritas som `div.modalpopup`. Rubriken står i `div.topContent`, flikarna i `li[id$="popupTabItem|PopupTabN"]` och innehållet i `div#…_PopupTabN.popupTabContent`.
+- **Etiketter** finns i tre former: `span.triton-label > label` (tillval, taggar, matriser), en lös `<label>` före fältet (kampanjer, rabattkoder) och en cell före fältet på samma tabellrad (innehållselement, där kolumnen Beskrivning är etiketten).
+- **Underlistor:** tillvalsartiklarna är `div.dragAndDropItem` i ordning, och ikonens `title` innehåller E37:s varning när en artikel inte går att köpa ("Tillvalsartikeln har inte någon publicerad artikelvariant", "Ingen artikelvariant är köpbar i webbplats …", med senaste köpbara datum). En taggs artiklar är tabellrader med en kryssruta `cbDelete_N`.
+- Listikonernas `title` ger status: "Pågår", "Avslutad" med slutdatum, "(Inaktiv)", "Aktiverad", "Dold", "Tidsstyrd version: …".
+- Sidorna är stora: kampanjlistan är ca 0,6 MB och en öppnad kampanj ca 7 MB, eftersom alla varugrupper och varumärken ligger som options. Att öppna en post tar några sekunder.
+- Taggar och sidor gäller den valda webbplatsen (`site=` i argumentet). `--site` byter först.
+
+**Kommer inte med än:**
+
+- Värdelistan för ett attribut, till exempel värdena i `#CAMPAIGN`. Fliken laddas troligen för sig.
+- Matrisvärdena och deras ordning (storlekssorteringen).
+- Innehållet på en sida och i en widgethållare (widgetar, texter och bilder per språk). Dialogen visar bara sidans inställningar och layout.
+- Texter för andra språk än webbplatsens. Språkflikarna (`LanguageTabContainer`) visar ett språk åt gången.
+
 Kartan nedan, med artikelregistret och variantdialogen, är från en tidigare kartläggning med Playwright och inte verifierad med `web.py`.
 
 ## Grunder
@@ -95,6 +126,7 @@ Fälten skrivs genom att sätta `value` och skicka `input`, `change`, `keyup` oc
 | Lucka | Varför webben | Källa |
 |---|---|---|
 | Läsa och skriva leveranstidstext per variant och webbplats | Fältet finns inte i Triton Admin REST API, som bara har ordrar och presentkort. Det finns inte heller i E37:s inbyggda export ("Exportera sökresultat", "Exportfiler"). | kartläggningen 2026-10-06 |
+| Kampanjer, rabattkoder, taggar, attribut, sidor, innehållselement, widgets, tillval, matriser | Inget av det finns i REST API:t. | `registers.py`, 2026-10-09 |
 
 Fyll på tabellen när fler luckor dyker upp. Varje funktion i `web.py` ska peka hit.
 

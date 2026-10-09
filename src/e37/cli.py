@@ -3,7 +3,7 @@ import json
 import sys
 from datetime import datetime
 
-from . import E37Error, admin, keychain, shop, web
+from . import E37Error, admin, keychain, registers, shop, web
 
 
 def _dump(data):
@@ -261,6 +261,55 @@ def cmd_sites(a):
         return 0
     for r in rows:
         print(f"{r['id']:>4}  {r['name']}{'  (standard)' if r['default'] else ''}")
+    return 0
+
+
+# ---- view (campaigns, discount codes, tags, ... read-only) --------------------
+
+def _first_line(s):
+    return next((x.strip() for x in s.splitlines() if x.strip()), "")
+
+
+def cmd_view(a):
+    s = web.Session(admin.resolve_account(a.account))
+    if a.site:
+        s.switch_site(_resolve_site(s, a.site))
+    if a.ref is None:
+        rows = registers.items(s, a.kind)
+        if a.find:
+            q = a.find.lower()
+            rows = [r for r in rows if q in " ".join([r["name"], *r["columns"], *r["notes"], r["parent"] or ""]).lower()]
+        if a.json:
+            _dump(rows)
+            return 0
+        section = object()
+        for r in rows:
+            if r["section"] != section and r["section"]:
+                print(f"\n{r['section']}")
+            section = r["section"]
+            name = f"{r['parent']} › {r['name']}" if r["parent"] else r["name"]
+            extra = "  ".join(r["columns"] + [_first_line(n) for n in r["notes"][:1]])
+            print(f"{r['id']:>7}  {name}{'  · ' + extra if extra else ''}")
+        print(f"\n{len(rows)} st i {registers.REGISTERS[a.kind][1]}")
+        return 0
+    d = registers.item(s, a.kind, a.ref)
+    if a.json:
+        _dump(d)
+        return 0
+    print(f"{d['title']}  (id {d['id']})")
+    tab = None
+    for f in d["fields"]:
+        if f["tab"] != tab:
+            print(f"\n  {f['tab']}")
+            tab = f["tab"]
+        print(f"    {f['label']}: {f['value']}")
+    for lst in d["lists"]:
+        print(f"\n  {lst['tab']}{' – ' + lst['label'] if lst['label'] else ''} ({len(lst['items'])} st)")
+        for i, it in enumerate(lst["items"][:a.top], 1):
+            note = "  ⚠ " + " / ".join(_first_line(n) for n in it["notes"]) if it.get("notes") else ""
+            print(f"    {i:>3}. {it['text']}{note}")
+        if len(lst["items"]) > a.top:
+            print(f"    … {len(lst['items']) - a.top} till (--top N eller --json)")
     return 0
 
 
@@ -841,6 +890,32 @@ def _add_delivery_commands(sub):
     s.set_defaults(fn=cmd_delivery_set)
 
 
+def _add_view_command(sub):
+    kinds = "\n".join(f"  {k:<15} {t}" for k, (_, t) in registers.REGISTERS.items())
+    s = _parser(sub, "view", "campaigns, discount codes, tags, pages and more in E37 Admin (read-only)",
+                "List one of E37 Admin's registers, or show one item in it with every field its\n"
+                "edit window has, through the person's web login. Read-only: an item is opened\n"
+                "the way clicking it in E37 Admin opens it, and nothing is saved.\n\n"
+                "KIND is one of:\n" + kinds + "\n\n"
+                "Without REF: every item, with id, name, the list's columns and E37's status notes\n"
+                "(ongoing, ended, inactive, end date). With REF (id from the list, or exact name):\n"
+                "the item's fields per tab, and its ordered sub-lists, e.g. an addition set's\n"
+                "articles with E37's warnings when one cannot be bought, or a tag's articles.\n"
+                "Tags and pages are per site; --site picks which.",
+                "examples:\n  e37 view campaigns --account vartex-outdoor --find 'black week'\n"
+                "  e37 view discount-codes --account vartex-outdoor --json\n"
+                "  e37 view addition-sets 3 --account vartex-outdoor --site 'Addnature SE'\n"
+                "  e37 view tags sale_last_50 --account vartex-outdoor --json")
+    s.add_argument("kind", choices=list(registers.REGISTERS), metavar="KIND", help="which register (see above)")
+    s.add_argument("ref", nargs="?", metavar="REF", help="id or exact name of one item; omit to list")
+    s.add_argument("--find", metavar="TEXT", help="only items whose name, columns or notes contain TEXT")
+    s.add_argument("--site", metavar="ID|NAME", help="site to read on (default the login's current one)")
+    s.add_argument("--top", type=int, default=50, metavar="N", help="sub-list rows shown without --json (default 50)")
+    _account_flag(s)
+    _json_flag(s)
+    s.set_defaults(fn=cmd_view)
+
+
 def _add_skill_commands(sub):
     s = _parser(sub, "install", "install the Claude skill that teaches Claude to use e37",
                 "Write SKILL.md to ~/.claude/skills/e37/, where Claude Code (and Code in the\n"
@@ -867,6 +942,7 @@ def main(argv=None):
                     "  shop     products in a shop, no login needed\n"
                     "  order    orders: the API with a key, otherwise your own E37 Admin login\n"
                     "  report   any E37 Admin report as JSON, via your own login\n"
+                    "  view     campaigns, discount codes, tags, attributes, pages, addition sets, ... (read-only)\n"
                     "  delivery-text  out-of-stock delivery text per variant (the only command that writes)\n"
                     "  sites    the shops your login can see\n"
                     "  account  your E37 instances, stored in the OS keychain\n"
@@ -877,7 +953,7 @@ def main(argv=None):
                "Every command has --help with examples.",
     )
     p.add_argument("--version", action="version", version=f"e37-cli {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,delivery-text,sites,account,skill,update}")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{shop,order,report,view,delivery-text,sites,account,skill,update}")
 
     sh = _parser(sub, "shop", "products in a shop: search, product, brands, categories, tags")
     _add_shop_commands(sh.add_subparsers(dest="shop_cmd", required=True))
@@ -887,6 +963,8 @@ def main(argv=None):
 
     r = _parser(sub, "report", "any E37 Admin report as JSON: list, show, get (web login)")
     _add_report_commands(r.add_subparsers(dest="report_cmd", required=True))
+
+    _add_view_command(sub)
 
     dt = _parser(sub, "delivery-text", "out-of-stock delivery text per variant and site: get, set")
     _add_delivery_commands(dt.add_subparsers(dest="delivery_cmd", required=True))
