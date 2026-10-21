@@ -958,24 +958,32 @@ def cmd_skill_install(a):
     return 0
 
 
-def _check_update(current, as_json):
-    """Compare with the version on GitHub's main. Reads one file; installs nothing.
-    Offline or unreachable is not an error: the answer is then 'unknown'."""
+def _latest_version(current, timeout=5):
+    """The version on GitHub's main. Reads one file; installs nothing. Offline or
+    unreachable is not an error: the answer is then None, meaning 'unknown'."""
     import re
     from urllib import request
-    latest = None
     try:
         req = request.Request(f"https://raw.githubusercontent.com/{REPO}/main/src/e37/__init__.py",
                               headers={"User-Agent": f"e37-cli/{current}"})
-        with request.urlopen(req, timeout=5) as r:
+        with request.urlopen(req, timeout=timeout) as r:
             m = re.search(r'__version__\s*=\s*"([^"]+)"', r.read().decode("utf-8", "replace"))
-            latest = m.group(1) if m else None
+            return m.group(1) if m else None
     except OSError:
-        pass
+        return None
+
+
+def _is_newer(latest, current):
+    import re
 
     def key(v):
         return tuple(int(x) for x in re.findall(r"\d+", v))
-    newer = bool(latest) and key(latest) > key(current)
+    return bool(latest) and key(latest) > key(current)
+
+
+def _check_update(current, as_json):
+    latest = _latest_version(current)
+    newer = _is_newer(latest, current)
     if as_json:
         _dump({"installed": current, "latest": latest, "update_available": newer})
     elif latest is None:
@@ -985,6 +993,25 @@ def _check_update(current, as_json):
     else:
         print(f"Senaste versionen ({current}) är installerad.")
     return 0
+
+
+def _update_hint(a, current):
+    """After a failed command, point at a newer e37 if there is one.
+
+    E37 Admin changes without warning, and by the time a command breaks the fix is
+    often already released: the .aspx redirect that silenced every postback and the
+    one-shop login before it were both fixed before anyone hit them again. Only a
+    version that really is newer is mentioned, so an ordinary mistake on an
+    up-to-date install still gets a clean answer, and GitHub out of reach says
+    nothing at all. stderr, so --json output stays machine-readable.
+    """
+    if getattr(a, "cmd", None) == "update":
+        return
+    latest = _latest_version(current, timeout=3)
+    if _is_newer(latest, current):
+        print(f"\nDet finns en nyare e37-cli: {latest} (installerad {current}). E37 Admin ändras "
+              f"utan förvarning, så felet kan vara rättat där. Uppdatera och försök igen:\n"
+              f"  python -m e37 update", file=sys.stderr)
 
 
 def cmd_update(a):
@@ -1598,6 +1625,7 @@ def main(argv=None):
         return a.fn(a)
     except E37Error as e:
         print(str(e), file=sys.stderr)
+        _update_hint(a, __version__)
         return 2
 
 

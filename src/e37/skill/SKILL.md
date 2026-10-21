@@ -404,6 +404,10 @@ ingenting i E37 och kontona ligger kvar, så du behöver inte fråga först. Sva
 GitHub inte går att nå, fortsätt med den version som finns. Kolla inte igen i samma
 konversation.
 
+Misslyckas ett kommando och felet avslutas med att det finns en nyare e37-cli:
+uppdatera och kör om kommandot en gång. E37 Admin ändras utan förvarning, och raden
+står bara där när en nyare version verkligen finns.
+
 Uppdatera också när personen ber om det, eller när ett kommando i den här texten inte
 finns:
 
