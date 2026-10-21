@@ -256,6 +256,9 @@ def cmd_sites(a):
     s = web.Session(admin.resolve_account(a.account))
     rows = [{"id": i, "name": n.replace("(standard)", "").strip(), "default": "(standard)" in n}
             for i, n in s.sites()]
+    if s.only_site:
+        print(f"{s.account['name']} har en enda webbplats, så E37 visar ingen butiksväljare.",
+              file=sys.stderr)
     if a.json:
         _dump(rows)
         return 0
@@ -733,6 +736,10 @@ def _articles_from(a):
 
 def _sites_from(s, a):
     if not a.site:
+        # An instance with a single site has nothing to choose between.
+        only = s.sites()
+        if len(only) == 1:
+            return [(only[0][0], only[0][1].replace("(standard)", "").strip())]
         raise E37Error("Ange minst en --site (namn eller id). Lista med: e37 sites --account NAMN")
     out = []
     for ref in a.site:

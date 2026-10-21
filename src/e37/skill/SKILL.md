@@ -85,6 +85,11 @@ python -m e37 sites --account NAMN --json
 `--site` på `order flow` och `report get` tar id eller namn (`20`, `'Addnature SE'`).
 Ett namn som passar flera webbplatser ger fel med alternativen. Fråga då.
 
+Har instansen en enda butik ritar E37 ingen butiksväljare. Då listas en webbplats, med
+webbshop-ID:t som id och namn, och `--site` är valfritt överallt. Det enda som inte går
+är `page change`: widgetens postback behöver E37:s numeriska webbplats-id, som bara står
+i väljaren.
+
 ## Ordrar
 
 Läser bara. Ändrar ingenting i E37.

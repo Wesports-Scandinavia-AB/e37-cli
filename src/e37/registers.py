@@ -21,7 +21,7 @@ from html import unescape
 from html.parser import HTMLParser
 
 from . import E37Error
-from .web import _current_site as web_current_site, _form_full
+from .web import _form_full
 
 # kind: (page, Swedish title as in E37 Admin's menu)
 REGISTERS = {
@@ -122,7 +122,7 @@ def _edit(session, page, html, sets, apply, reopen, scope=None, save=_SAVE, alwa
     controls, lists = _controls(_box(html))
     if scope:
         controls = [c for c in controls if scope(c["name"])]
-    site = web_current_site(html)
+    site = session.site_of(html)
     plan = []
     for key, value in sets:
         group = _resolve(controls, key)
@@ -161,7 +161,7 @@ def _edit(session, page, html, sets, apply, reopen, scope=None, save=_SAVE, alwa
     button = re.findall(save, html)
     if len(button) != 1:
         raise E37Error(f"hittade {len(button)} Spara-knappar för dialogen, avbryter")
-    if web_current_site(html) != site:
+    if session.site_of(html) != site:
         raise E37Error("fel webbplats inför skrivning, avbryter")
     data[button[0] + ".x"], data[button[0] + ".y"] = "5", "5"
     _, saved = session._page(page, data)
@@ -170,7 +170,7 @@ def _edit(session, page, html, sets, apply, reopen, scope=None, save=_SAVE, alwa
     said = f" E37 sa: {message}" if message else ""
 
     again = reopen()
-    if web_current_site(again) != site:
+    if session.site_of(again) != site:
         raise E37Error("webbplatsen byttes under sparningen; kontrollera posten i E37 Admin")
     after, after_lists = _controls(_box(again))
     if scope:
@@ -840,7 +840,13 @@ def change_widget(session, page_ref, widget_id, sets, apply=False):
 
 def _open_widget(session, page_ref, widget_id):
     pg, it, html = _open(session, "pages", page_ref)
-    site = web_current_site(html)
+    site = session.site_of(html)
+    if not (site or "").isdigit():
+        # The widget postback carries E37's own numeric site id, and the only place it
+        # is readable is the shop picker, which a one-shop instance does not have.
+        raise E37Error("widgetar kräver E37:s numeriska webbplats-id, och butiksväljaren "
+                       "som det läses ur finns inte på den här instansen (en enda butik). "
+                       "Ändra widgeten i E37 Admin så länge.")
     # A widget of another version is not drawn on the page dialog; it still opens by id.
     opened = _post(session, pg, html, {"__EVENTTARGET": _P,
                                        "__EVENTARGUMENT": f"edit_id={int(widget_id)};siteid={site};"})

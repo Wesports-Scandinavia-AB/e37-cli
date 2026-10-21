@@ -5,7 +5,7 @@
     shop.call("addnature", "search_products", query="jacka")   # the public shop MCP
 """
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 
 class E37Error(Exception):

@@ -91,23 +91,50 @@ class Session:
 
     def _login(self, shop_id, email, password):
         final, html = self._page(self.base)
-        if "ddlSitePicker" in html:
+        if not _is_login_page(html) and self._has_auth_cookie():
+            self._adopt_home(html)
             return
         data = _hidden(html)
         # btnLogin is an <input type=image>: a browser posts the click position.
         data.update({"tbAccountName": shop_id, "tbEmail": email, "tbPassword": password,
                      "btnLogin.x": "10", "btnLogin.y": "10"})
         _, html = self._page(final, data)
-        if "ddlSitePicker" not in html:
+        if _is_login_page(html) or not self._has_auth_cookie():
             raise E37Error(f"Inloggningen i E37 Admin misslyckades för {self.account['name']}. "
                            f"Kontrollera webbshop-ID, e-post och lösenord med: "
                            f"e37 account add {self.account['name']} --dialog")
+        self._adopt_home(html)
+
+    def _has_auth_cookie(self):
+        """E37 hands out .E37ADMINAUTH on a successful login and on nothing else, so the
+        cookie says the session is signed in without reading the page."""
+        return any("ADMINAUTH" in c.name.upper() for c in self._jar)
+
+    def _adopt_home(self, html):
+        """Keep the start page, and settle whether this instance has a shop picker.
+
+        E37 draws ctl00$ddlSitePicker only when the login reaches more than one shop.
+        An instance with a single shop has no picker, nothing to switch between, and
+        no site id to read out of one; its one site is then called by the webshop ID
+        the login was made with. Absence of the picker is therefore a one-shop
+        instance, never a failed login.
+        """
         self._home = html
+        self.only_site = None if _site_options(html) is not None else str(self.account["webshopId"])
 
     def sites(self):
-        """[(id, name)] for every site this login can see; the default marked by E37 in the name."""
-        m = re.search(r'<select[^>]*ddlSitePicker[^>]*>(.*?)</select>', self._home, re.S)
-        return [(v, unescape(t).strip()) for v, t in _options(m.group(1))] if m else []
+        """[(id, name)] for every site this login can see; the default marked by E37 in
+        the name. A one-shop instance answers with its single site, id and name both
+        the webshop ID, since E37 gives no picker to read them from."""
+        if self.only_site:
+            return [(self.only_site, self.only_site)]
+        opts = _site_options(self._home)
+        return [(v, unescape(t).strip()) for v, t in _options(opts)] if opts else []
+
+    def site_of(self, html):
+        """The site a page was rendered for: E37's own site id, or the only site's name
+        on an instance without a picker to read the id from."""
+        return self.only_site or _current_site(html)
 
     # ---- reports -------------------------------------------------------------
 
@@ -196,6 +223,12 @@ class Session:
         """Make one site current for this session. Site-bound fields (texts per
         language) are read and written for the current site, so callers check
         current_site() again before every write rather than trusting this."""
+        if self.only_site:
+            if str(site_id) != self.only_site:
+                raise E37Error(f"{self.account['name']} har bara webbplatsen {self.only_site}, "
+                               f"inte {site_id}.")
+            _, self._articles = self._page(ARTICLES_PAGE)
+            return
         _, html = self._page(ARTICLES_PAGE)
         if _current_site(html) == str(site_id):
             self._articles = html
@@ -210,7 +243,7 @@ class Session:
     def current_site(self):
         _, html = self._page(ARTICLES_PAGE)
         self._articles = html
-        return _current_site(html)
+        return self.site_of(html)
 
     # ---- article variants ----------------------------------------------------
 
@@ -243,7 +276,7 @@ class Session:
         for one variant on the current site."""
         html = self._open_variant(self.find_variant(art_nr))
         name, lang, value = _delivery_field(html)
-        return _current_site(html), lang, value
+        return self.site_of(html), lang, value
 
     def set_delivery_text(self, art_nr, text, site_id):
         """Write the out-of-stock delivery text for one variant on one site, then prove it.
@@ -254,12 +287,12 @@ class Session:
         the new text and nothing else may have moved. Anything else is an error
         the caller must stop on. Returns (old, new_as_read_back).
         """
-        if _current_site(self._articles) != str(site_id):
+        if self.site_of(self._articles) != str(site_id):
             self.switch_site(site_id)
         variant_id = self.find_variant(art_nr)
         html = self._open_variant(variant_id)
-        if _current_site(html) != str(site_id):
-            raise E37Error(f"fel webbplats ({_current_site(html)}) inför skrivning, avbryter")
+        if self.site_of(html) != str(site_id):
+            raise E37Error(f"fel webbplats ({self.site_of(html)}) inför skrivning, avbryter")
         name, lang, old = _delivery_field(html)
         before = _form_full(html)
         if old == text:
@@ -301,6 +334,18 @@ def _rewritten(requested, final):
     there (seen 2026-10-21); every path in this module is still written with .aspx
     because that is what the UI's own links say."""
     return requested.endswith(".aspx") and final.split("?")[0] == requested[: -len(".aspx")]
+
+
+def _is_login_page(html):
+    """E37 Admin answers with its login form whenever the session is not signed in,
+    a rejected login included. tbPassword is on no other page."""
+    return 'name="tbPassword"' in html
+
+
+def _site_options(html):
+    """The shop picker's options, or None when E37 drew no picker at all."""
+    m = re.search(r'<select[^>]*ddlSitePicker[^>]*>(.*?)</select>', html, re.S)
+    return m.group(1) if m else None
 
 
 def _current_site(html):

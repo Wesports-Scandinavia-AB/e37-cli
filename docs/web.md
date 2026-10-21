@@ -10,8 +10,8 @@ Kört med `urllib` och en cookie-jar, utan webbläsare, mot en riktig instans me
 
 | Vad | Hur |
 |---|---|
-| Inloggning | GET `/` skickar till `login.aspx?ReturnUrl=%2f`. POST samma adress med de dolda `__VIEWSTATE`-fälten, `tbAccountName` (webbshop-ID), `tbEmail`, `tbPassword` och `btnLogin.x`/`btnLogin.y` (bildknapp). Lyckad om svaret innehåller `ddlSitePicker`. Cookies: `.E37ADMINSESSION`, `.E37ADMINAUTH`, `TritonAdminLogin`. |
-| Webbplatser | Options i `ctl00$ddlSitePicker` på startsidan. Standardbutiken har `(standard)` i namnet. |
+| Inloggning | GET `/` skickar till `login.aspx?ReturnUrl=%2f`. POST samma adress med de dolda `__VIEWSTATE`-fälten, `tbAccountName` (webbshop-ID), `tbEmail`, `tbPassword` och `btnLogin.x`/`btnLogin.y` (bildknapp). Lyckad när svaret inte längre är inloggningsformuläret (`name="tbPassword"` saknas) och sessionen har fått `.E37ADMINAUTH`. Cookies: `.E37ADMINSESSION`, `.E37ADMINAUTH`, `TritonAdminLogin`. |
+| Webbplatser | Options i `ctl00$ddlSitePicker` på startsidan. Standardbutiken har `(standard)` i namnet. Väljaren ritas bara när inloggningen når mer än en butik; se "En enda butik". |
 | Rapporttyper | Options i `ctl00$cph1$ddlReportType` på `workspace/workwith/reports.aspx`. 28 typer. |
 | Rapportens inställningar | Postback med `__EVENTTARGET=ctl00$cph1$ddlReportType` och vald typ. Inställningarna ritas som `<div data-setting-id=… data-setting-type=…>` med input, select, radio eller checkbox i. |
 | Ladda ner en rapport | GET `/custom/orderReportHandler.ashx?data=…&reportType=ID&fileType=5`. `data` är `id:värde` per inställning, åtskilda med `¤`. Kryssrutor `true`/`false`, datumintervall `från,till` i rapportens format. `fileType` 5 är JSON (1 tabb, 2 semikolon, 3 Excel). Svaret är `{"rows": […], "columns": […]}` med `Content-Disposition: attachment`. |
@@ -153,7 +153,7 @@ E37 Admin är ASP.NET WebForms, inte JSON-endpoints:
 | Sida | `login.aspx`. `https://admin3.e37.se/` skickar dit om man inte är inloggad. |
 | Fält | Etiketterna **Webbshop-ID**, **Epost**, **Lösenord** |
 | Knapp | **Logga in** |
-| Lyckad | Sidan efter inloggning har butiksväljaren `#ctl00_ddlSitePicker` |
+| Lyckad | Svaret är inte längre inloggningsformuläret, och cookien `.E37ADMINAUTH` har satts. **Inte** att butiksväljaren finns: den ritas bara för konton med flera butiker. |
 
 Det är en personlig inloggning (e-post och lösenord), inte API-nyckeln. Webbshop-ID är troligen samma värde som användarnamnet i REST-API:ts Basic-auth (`webshopId` i kontot), men det är **[overifierat]**. Ett webbshop-ID omfattar flera webbplatser. En instans kan till exempel ha en butik per land.
 
@@ -168,6 +168,23 @@ Det är en personlig inloggning (e-post och lösenord), inte API-nyckeln. Webbsh
 | Kontroll | Läs vald option efter omladdningen. Står den inte på rätt butik, avbryt. |
 
 Butiksvalet är sessionstillstånd på serversidan. Allt som görs efteråt gäller den valda webbplatsen.
+
+## En enda butik
+
+En instans vars inloggning bara når en butik får ingen butiksväljare alls. E37 ritar
+`ddlSitePicker` först när det finns något att välja mellan. Rapporterat av August Höglund
+(Cargobike of Sweden) 2026-10-21 och åtgärdat i 0.15.0; **[overifierat]** av oss själva,
+eftersom vi inte har någon enbutiksinstans att köra mot.
+
+| | |
+|---|---|
+| Inloggning | Avsaknad av väljaren betyder en enda butik, aldrig en misslyckad inloggning. Till och med 0.14.0 tolkades den som ett fel, så ingenting alls gick att köra. |
+| `Session.only_site` | Webbshop-ID:t som inloggningen gjordes med, när väljaren saknas. Annars `None`. |
+| `sites()` | Den enda webbplatsen, med webbshop-ID:t som både id och namn. E37 lämnar inget annat att läsa dem ur. |
+| `site_of(html)` | `only_site`, annars vald option i väljaren. Använd den i stället för `_current_site` överallt där en session finns. |
+| `switch_site()` | Laddar om artikelsidan och tar emot bara den egna webbplatsen. Det finns ingen postback att göra. |
+| `--site` | Valfri när instansen har en enda webbplats. `delivery-text` tar den automatiskt. |
+| Kvar | Widgetens postback (`page change`) bär E37:s **numeriska** webbplats-id, och väljaren är enda stället vi vet att det går att läsa. På en enbutiksinstans avbryter kommandot med ett besked om att ändra widgeten i E37 Admin i stället. |
 
 ## Artikelregistret
 
