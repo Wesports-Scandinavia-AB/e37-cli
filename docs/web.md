@@ -138,6 +138,13 @@ E37 Admin är ASP.NET WebForms, inte JSON-endpoints:
 - Kontroller heter `ctl00$cph1$...` i `name` och `ctl00_cph1_...` i `id`. `cph1` är sidans innehållsplatshållare.
 - Sessionen är en cookie (`ASP.NET_SessionId` och/eller `.ASPXAUTH`) som måste följa med i alla anrop.
 - Sökning och butiksbyte är fullständiga postbacks. Sidan laddas om.
+- **Adresserna har ingen `.aspx` längre.** En GET av `reports.aspx` omdirigeras till
+  `reports`. En POST dit omdirigeras också, och en omdirigering gör om en POST till en
+  GET, så postbacken försvinner: E37 svarar med den orörda sidan, utan felmeddelande och
+  med samma längd som förut. Upptäckt 2026-10-21, när rapportinställningar, orderrutan
+  och alla dialoger i marknadsregistren tystnade på en gång. `_page` upprepar därför
+  POST:en mot den adress omdirigeringen pekade på. Sökvägarna i koden står kvar med
+  `.aspx`, eftersom det är så E37:s egna länkar ser ut.
 
 ## Inloggning
 

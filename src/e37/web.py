@@ -60,8 +60,11 @@ class Session:
 
     # ---- transport -----------------------------------------------------------
 
+    def _url(self, path):
+        return path if path.startswith("http") else self.base + path.lstrip("/")
+
     def _open(self, path, data=None):
-        url = path if path.startswith("http") else self.base + path.lstrip("/")
+        url = self._url(path)
         body = parse.urlencode(data, doseq=True).encode() if data is not None else None
         req = request.Request(url, data=body, headers={"User-Agent": USER_AGENT})
         try:
@@ -72,6 +75,15 @@ class Session:
             raise E37Error(f"Nådde inte {self.base}: {e.reason}")
 
     def _page(self, path, data=None):
+        final, html = self._read(path, data)
+        if data is not None and _rewritten(self._url(path), final):
+            # The POST was redirected, and a redirect turns a POST into a GET: the
+            # postback is dropped and E37 answers with the untouched page, no error
+            # anywhere. Repeat it against the address the redirect pointed at.
+            final, html = self._read(final, data)
+        return final, html
+
+    def _read(self, path, data=None):
         with self._open(path, data) as r:
             return r.geturl(), r.read().decode("utf-8", errors="replace")
 
@@ -281,6 +293,14 @@ class Session:
 
 ARTICLES_PAGE = "workspace/workwith/articles/list.aspx"
 _VARIANT_PREFIX = "ctl00$cph1$mod1$pnl$usrCtrl"
+
+
+def _rewritten(requested, final):
+    """True when E37 Admin redirected a `.aspx` path to the same path without the
+    extension. Admin serves its pages extensionless and redirects the old addresses
+    there (seen 2026-10-21); every path in this module is still written with .aspx
+    because that is what the UI's own links say."""
+    return requested.endswith(".aspx") and final.split("?")[0] == requested[: -len(".aspx")]
 
 
 def _current_site(html):
