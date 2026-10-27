@@ -18,6 +18,11 @@ ON MACOS THE VALUE NEVER TOUCHES ARGV. `security add-generic-password -w VALUE`
 would put it in the process list for every user to read, so the write goes through
 `security -i` with the command on stdin, and the value hex-encoded (-X) so no
 quoting of JSON is involved.
+
+Reading is hex too, sometimes. `find-generic-password -w` prints the raw value
+when it is plain ASCII and the bytes as hex digits when it is not, without saying
+which. A password or an e-mail with å, ä or ö lands in the second case, so the
+read goes through `_mac_unhex`.
 """
 
 import json
@@ -185,13 +190,33 @@ def _security(args, stdin=None):
     return subprocess.run(["/usr/bin/security", *args], input=stdin, capture_output=True, text=True)
 
 
+def _mac_unhex(text):
+    """Undo the hex encoding `security -w` uses for values that are not plain ASCII.
+
+    A password or an e-mail address with å, ä or ö is not printable ASCII, so
+    `find-generic-password -w` prints the bytes as hex digits instead of the
+    value. It says nothing about which of the two it did, but our value is always
+    a JSON object: it starts with `{`, and `{` is not a hex digit. So a run of
+    hex digits is the encoding and never the value itself.
+    """
+    s = text.strip()
+    if s.startswith("0x"):
+        s = s[2:]
+    if text.lstrip().startswith("{") or not s or len(s) % 2:
+        return text
+    try:
+        return bytes.fromhex(s).decode("utf-8")
+    except ValueError:  # not hex after all, or not UTF-8: hand back what we got
+        return text
+
+
 def _mac_get(name):
     r = _security(["find-generic-password", "-s", SERVICE, "-a", name, "-w"])
     if r.returncode == 44:  # errSecItemNotFound
         return None
     if r.returncode:
         raise E37Error(f"Nyckelringen: läsning misslyckades ({r.stderr.strip()})")
-    return r.stdout.rstrip("\n")
+    return _mac_unhex(r.stdout.rstrip("\n"))
 
 
 def _mac_put(name, raw):
