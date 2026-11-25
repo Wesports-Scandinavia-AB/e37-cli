@@ -25,6 +25,13 @@ med resultatet i vanlig svenska, inte med kommandoutskrifter.
   bör bytas i E37 Admin, och öppna fönstret i stället.
 - Skicka aldrig hemligheter via stdin, miljövariabler, filer eller kommandorad.
 - Det finns inget kommando som skriver ut en hemlighet. Leta inte efter något.
+- Be aldrig om MFA-koder i chatten och läs dem inte ur personens e-post.
+  När E37 kräver MFA visar CLI:et ett separat kodfönster på personens dator
+  om det saknar interaktiv terminal. Berätta att personen ska skriva appens
+  eller e-postens engångskod där. Vänta på kommandot; starta inte en ny körning
+  medan fönstret är öppet. Använd minst 4 minuters verktygstimeout.
+  Har agenten en PTY, sätt `E37_MFA_MODE=dialog` för att få samma fönster.
+  Koden sparas aldrig. Avbrott eller tre underkända koder stoppar kommandot.
 
 ## Vilket konto?
 

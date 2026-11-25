@@ -265,3 +265,26 @@ e37 web delivery-text set FIL          sätt från CSV/xlsx (art-nr;datum), --dr
 - Dokumentera varje funktion med vilken lucka i API:et den täcker, så att den kan tas bort när API:et hinner ikapp.
 - Hantera att ViewState blir ogiltig (session löpt ut, sida ändrad). Logga in igen och hämta om sidan i stället för att krascha.
 - Spara aldrig sessioncookies eller inloggningsuppgifter i repot.
+
+## MFA i webbinloggningen (2026-11-25)
+
+E37 använder ett separat WebForms-steg på `/loginMfa`. Verifierat genom ett
+inloggningsförsök med ett befintligt konto på admin3: appsteget har `tbVerifyCode`
+och bildknappen `btnVerifyCode`. CLI:et postar dessa med aktuell dold WebForms-state
+i samma cookie-session. `cbStaySignedIn` skickas inte; ingen betrodd enhet eller
+delad session skapas. Slutlig inloggning kräver fortfarande autentiseringscookien.
+
+Från 0.18.0 frågar CLI:et efter koden med dold terminalinmatning eller ett lokalt
+kodfönster när kommandot körs utan terminal, exempelvis från Claude. Mac har en
+AppleScript-reserv om tkinter inte är tillgängligt. Se README för `E37_MFA_MODE`.
+Bibliotekets `Session(..., mfa_prompt=callback)` kan använda en egen inmatning;
+callbacken tar kontonamn och försöksnummer och returnerar kod eller None för avbrott.
+Högst tre kodförsök görs; koden lagras inte.
+
+App-MFA verifierades på Windows med kodfönstret: efter angiven kod returnerade
+`sites --json` 21 webbplatser med exitkod 0.
+
+E-post-MFA är rapporterat av användaren. Samma kodformulär stöds oavsett varifrån
+koden kommer, men e-postflödets faktiska formulär och eventuell separat knapp för
+att begära ett mejl har inte verifierats live. CLI:et väljer inte automatiskt en
+annan MFA-metod eller begär omsändning. Mac-dialogen är inte provkörd på en Mac.

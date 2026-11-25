@@ -46,7 +46,7 @@ def base_url(account):
 class Session:
     """A signed-in E37 Admin session for one account."""
 
-    def __init__(self, account, timeout=120):
+    def __init__(self, account, timeout=120, mfa_prompt=None):
         web = account.get("web") or {}
         if not (account.get("webshopId") and web.get("email") and web.get("password")):
             raise E37Error(f"E37-kontot {account['name']} saknar webbinloggning (webbshop-ID, e-post, lösenord). "
@@ -54,6 +54,7 @@ class Session:
         self.account = account
         self.base = base_url(account)
         self.timeout = timeout
+        self._mfa_prompt = mfa_prompt
         self._jar = http.cookiejar.CookieJar()
         self._op = request.build_opener(request.HTTPCookieProcessor(self._jar))
         self._login(account["webshopId"], web["email"], web["password"])
@@ -98,12 +99,32 @@ class Session:
         # btnLogin is an <input type=image>: a browser posts the click position.
         data.update({"tbAccountName": shop_id, "tbEmail": email, "tbPassword": password,
                      "btnLogin.x": "10", "btnLogin.y": "10"})
-        _, html = self._page(final, data)
+        final, html = self._page(final, data)
+        if _is_mfa_page(html):
+            final, html = self._verify_mfa(final, html)
         if _is_login_page(html) or not self._has_auth_cookie():
             raise E37Error(f"Inloggningen i E37 Admin misslyckades för {self.account['name']}. "
                            f"Kontrollera webbshop-ID, e-post och lösenord med: "
                            f"e37 account add {self.account['name']} --dialog")
         self._adopt_home(html)
+
+    def _verify_mfa(self, final, html):
+        from .mfa import ask_code
+
+        prompt = self._mfa_prompt or ask_code
+        for attempt in range(1, 4):
+            code = prompt(self.account["name"], attempt)
+            if not code or not code.strip():
+                raise E37Error("MFA-inloggningen avbröts. Ingen kod skickades.")
+            # Use fresh WebForms state on every attempt. Never remember the
+            # device: sessions belong to this run and must not be shared.
+            data = _hidden(html)
+            data.update({"tbVerifyCode": code.strip(),
+                         "btnVerifyCode.x": "10", "btnVerifyCode.y": "10"})
+            final, html = self._page(final, data)
+            if not _is_mfa_page(html):
+                return final, html
+        raise E37Error("E37 godkände inte MFA-koden efter tre försök. Kör kommandot igen för en ny inloggning.")
 
     def _has_auth_cookie(self):
         """E37 hands out .E37ADMINAUTH on a successful login and on nothing else, so the
@@ -340,6 +361,10 @@ def _is_login_page(html):
     """E37 Admin answers with its login form whenever the session is not signed in,
     a rejected login included. tbPassword is on no other page."""
     return 'name="tbPassword"' in html
+
+
+def _is_mfa_page(html):
+    return bool(re.search(r'''\bname\s*=\s*["']tbVerifyCode["']''', html, re.I))
 
 
 def _site_options(html):

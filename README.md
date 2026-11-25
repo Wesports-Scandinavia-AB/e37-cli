@@ -143,6 +143,22 @@ För CI eller ett engångsskript går miljövariabler före nyckelringen: `E37_A
 
 ## Dokumentation
 
+### Tvåfaktorsinloggning (MFA)
+
+När E37 begär en engångskod frågar CLI:et efter koden från din app eller E37:s
+e-post. I en interaktiv terminal matas den in dolt. När Claude eller en annan
+agent kör kommandot utan terminal visas automatiskt ett separat fönster på din
+dator. Skriv koden där, aldrig i chatten. Inloggningen fortsätter i samma session.
+
+`E37_MFA_MODE=dialog` tvingar kodfönstret (även om agenten använder en PTY).
+`terminal` tvingar dold terminalinmatning och `none` stoppar direkt om MFA krävs,
+för obemannade jobb. Standard är `auto`. Fönstret kräver en lokal skrivbordssession
+och Python med tkinter; macOS har även en AppleScript-reserv.
+
+Koden sparas aldrig och behöver anges på nytt när nästa körning kräver MFA.
+Avbryt, tre underkända koder eller tre minuter utan svar i fönstret stoppar
+kommandot. Agentens verktygstimeout bör vara minst fyra minuter.
+
 Se `docs/README.md`: Order-API, OpenAPI-spec, MCP-servern och anteckningar om webbgränssnittet.
 
 ## Från Python
